@@ -1,0 +1,36 @@
+{
+  "stages": [
+    {
+      "stage": "Setup",
+      "start": "2026-09-22T09:04:00Z",
+      "end": "2026-09-22T10:50:38Z",
+      "painPoints": "Building the milestone PDF, getting the images in correctly, and transferring text/image content and font size onto the image."
+    },
+    {
+      "stage": "Story Development",
+      "start": "2026-09-22T10:51:26Z",
+      "end": null,
+      "stepsPlanned": 9,
+      "steps": [
+        {
+          "step": 1,
+          "start": "2026-09-22T10:51:26Z",
+          "end": "2026-09-22T11:44:16Z",
+          "painPoints": "Really nothing — pretty seamless."
+        },
+        {
+          "step": 2,
+          "start": "2026-09-22T11:44:16Z",
+          "end": "2026-09-22T13:44:16Z",
+          "painPoints": "Adapting step 1's content so it actually works with the Scrollama logic; having to be much more specific about exactly what Scrollama logic was required; reining in Claude adding stuff that wasn't asked for; reining in Claude going rogue with the tech stack."
+        },
+        {
+          "step": 3,
+          "start": "2026-09-22T15:51:47Z",
+          "end": null,
+          "painPoints": null
+        }
+      ]
+    }
+  ]
+}
