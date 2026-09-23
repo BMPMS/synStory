@@ -104,6 +104,23 @@ export const step2 = {
 // holdFraction, then fades out as a whole over fadeOutFraction, leaving a
 // small gap before the next quote's slice begins.
 export const step4 = {
+  // Before any quote appears: the "What is SYNAESTHESIA?" title, "It's
+  // when one of your 5 senses", and the two closing lines all fade out
+  // together, while the sense icons rise to make room below them — how
+  // far is computed in ChartSvg (near header height, using the same
+  // topPadding the header itself uses), not a flat number here. Quick —
+  // 6% of the step — and the quotes themselves don't start until it's
+  // done (see layoutQuoteReveals below).
+  clear: {
+    fadeOut: { start: 0, end: 0.06 }
+  },
+  // Right after the icons finish rising, the (placeholder, for now)
+  // people illustration and the speech bubble above it fade in together
+  // and then stay for the whole step — quotes don't start until this is
+  // done.
+  people: {
+    fadeIn: { start: 0.06, end: 0.1 }
+  },
   revealFraction: 0.55,
   holdFraction: 0.2,
   fadeOutFraction: 0.2,
@@ -113,6 +130,31 @@ export const step4 = {
   // much at its peak.
   flashHalfWidth: 0.015,
   flashScale: 0.4
+};
+
+// Step 5: after the last quote, the story consolidates onto "sight" —
+// everything from step 4 except the sense icons + labels and the
+// people tiles fades out, the sense icons themselves move from their
+// row into a ring (sight at the top, the other 4 spaced evenly around
+// it, around the same point on screen the row already rested at), and
+// once the ring has landed, a circle plus its 3 "sight splits into..."
+// sub-icons and a caption fade in.
+export const step5 = {
+  arrive: {
+    fadeOut: { start: 0, end: 0.15 }
+  },
+  reveal: {
+    fadeIn: { start: 0.2, end: 0.4 }
+  }
+};
+
+// Step 6: once the sight scene has settled, the synaesthesia-relationship
+// arrows (and the duplicated person-photo fans that sit along them)
+// fade in together.
+export const step6 = {
+  reveal: {
+    fadeIn: { start: 0.1, end: 0.5 }
+  }
 };
 
 // A phase that ramps in over `in_`, then unwinds over `out` — used so a
@@ -132,11 +174,16 @@ export function windPhase(t, in_, out) {
 // quote. Returns one layout object per quote:
 // { sliceStart, sliceEnd, words: [{start, end}, ...], fadeStart, fadeEnd }
 export function layoutQuoteReveals(quotes, cfg) {
+  // Quotes only start once the "clear" phase (old text fading out, icons
+  // rising) and the people/bubble fade-in have both finished — everything
+  // below is sliced across the remaining range, not the full 0–1.
+  const rangeStart = cfg.people ? cfg.people.fadeIn.end : cfg.clear ? cfg.clear.fadeOut.end : 0;
+  const rangeLen = 1 - rangeStart;
   const n = quotes.length;
-  const sliceLen = n > 0 ? 1 / n : 1;
+  const sliceLen = n > 0 ? rangeLen / n : rangeLen;
 
   return quotes.map((quote, qi) => {
-    const sliceStart = qi * sliceLen;
+    const sliceStart = rangeStart + qi * sliceLen;
     const sliceEnd = sliceStart + sliceLen;
 
     const revealLen = sliceLen * cfg.revealFraction;

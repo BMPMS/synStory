@@ -26,7 +26,7 @@ export const quotes = [
       { text: 'tone', sense: 'sound' },
       { text: 'when' }, { text: 'he' }, { text: 'plays' }, { text: 'guitar,' },
       { text: 'it’s' }, { text: 'really' }, { text: 'calming' }, { text: 'like' },
-      { text: 'a' }, { text: 'burnt' },
+      { text: 'a' }, { text: 'burnt', sense: 'smell' },
       { text: 'orangey', sense: 'sight' },
       { text: 'colour', sense: 'sight' }
     ]
@@ -44,7 +44,7 @@ export const quotes = [
     words: [
       { text: 'A' }, { text: 'certain' },
       { text: 'smell', sense: 'smell' },
-      { text: 'I' }, { text: 'will' }, { text: 'experience' }, { text: 'as' }, { text: 'a' }, { text: 'soft' },
+      { text: 'I' }, { text: 'will' }, { text: 'experience' }, { text: 'as' }, { text: 'a' }, { text: 'soft', sense: 'touch' },
       { text: 'blue', sense: 'sight' },
       { text: 'circle,' }, { text: 'or' }, { text: 'perhaps' }, { text: 'a' }, { text: 'triangle' }
     ]

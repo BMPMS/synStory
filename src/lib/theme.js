@@ -7,6 +7,14 @@ export const colors = {
 	background: '#F7F3EC',
 	text: '#2B2A28',
 
+	// Started as the exact section-title grey from the Setup spec
+	// (docs/milestones/setup-spec.pdf) — colour-picked from the
+	// rendered PDF: #868580. Lightened from there per Bryony ("a
+	// lighter grey would be amazing"), so this is no longer the literal
+	// spec value. Used as the outline for the quote bubbles and the
+	// sight-scene circles.
+	grey: '#B6B6B3',
+
 	// accents — mapped to the Fisher-Price magnetic letter research
 	blue: '#196AAD',
 	red: '#D25241',
@@ -19,6 +27,25 @@ export const colors = {
 export const fonts = {
 	heading: "'Fredoka', system-ui, sans-serif", // capitals & titles
 	body: "'Literata', Georgia, serif" // reading text
+};
+
+// The spacing scale from Setup — Spec (docs/milestones/setup-spec.pdf),
+// read off the actual chart there (measured, not guessed): 8 named
+// steps, px values, smallest to largest.
+export const spacing = {
+	xs: 2,
+	sm: 4,
+	md: 8,
+	lg: 12,
+	xl: 16,
+	'2xl': 24,
+	'3xl': 32,
+	'4xl': 48,
+	// Extends the measured Setup-spec steps, continuing its alternating
+	// x1.333 / x1.5 progression (not itself read off the spec chart —
+	// added 2026-09 for layouts that needed more room than 4xl gave).
+	'5xl': 64,
+	'6xl': 96
 };
 
 // The type scale from Setup, as actual values (this had only ever lived

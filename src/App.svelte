@@ -24,6 +24,15 @@
   // ~65 words across 5 quotes need more scroll room than step 3 has left.
   let quotesProgress = $derived(activeIndex < 3 ? 0 : activeIndex === 3 ? stepProgress : 1);
 
+  // Step 5 (after the last quote: everything but the sense icons + the
+  // people tiles fades out, the sense icons move into a ring around
+  // sight, then its 3 sub-icons + a caption fade in): its own step too.
+  let sightProgress = $derived(activeIndex < 4 ? 0 : activeIndex === 4 ? stepProgress : 1);
+
+  // Step 6 (the synaesthesia-relationship arrows + the person-photo fans
+  // that sit on them, once the sight scene has settled): one index further.
+  let linksProgress = $derived(activeIndex < 5 ? 0 : activeIndex === 5 ? stepProgress : 1);
+
   onMount(() => {
     const scroller = scrollama();
     scroller
@@ -58,7 +67,9 @@
         {etymologyProgress}
         {titleProgress}
         {quotesProgress}
-        ariaLabel="Ten square portraits of well-known people, drifting and bouncing gently within the frame."
+        {sightProgress}
+        {linksProgress}
+        ariaLabel="Twelve square portraits of well-known people, drifting and bouncing gently within the frame."
       />
 
       <p
@@ -76,4 +87,7 @@
   <div class="step"></div>
   <div class="step"></div>
   <div class="step"></div>
+  <div class="step"></div>
+  <div class="step"></div>
+  <div class="scroll-buffer"></div>
 </div>

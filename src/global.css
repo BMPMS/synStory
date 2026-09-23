@@ -47,6 +47,18 @@ img {
   height: 100vh;
 }
 
+/* Scrollama's progress for a step is driven by its bottom edge crossing
+   the offset trigger line (90% down the viewport, per the setup() call
+   in App.svelte) — for the LAST step that needs room to scroll past
+   its own bottom, and with nothing after it, the page simply runs out
+   of scroll first and progress gets stuck short of 1, cutting the last
+   quote off mid-reveal. This is never itself visible (the pinned scene
+   has already unstuck by the time you'd reach it) — it exists purely
+   to give scroll-tracking room to finish. */
+.scroll-buffer {
+  height: 100vh;
+}
+
 main {
   position: absolute;
   inset: 0;

@@ -11,6 +11,8 @@ import pharrellWilliams from '../assets/people/pharrell-williams.jpg';
 import billyJoel from '../assets/people/billy-joel.jpg';
 import lorde from '../assets/people/lorde.jpg';
 import geoffreyRush from '../assets/people/geoffrey-rush.jpg';
+import marilynMonroe from '../assets/people/marilyn-monroe.jpg';
+import danielTammet from '../assets/people/daniel-tammet.jpg';
 
 export const people = [
 	{ name: 'David Hockney', image: davidHockney },
@@ -22,5 +24,7 @@ export const people = [
 	{ name: 'Pharrell Williams', image: pharrellWilliams },
 	{ name: 'Billy Joel', image: billyJoel },
 	{ name: 'Lorde', image: lorde },
-	{ name: 'Geoffrey Rush', image: geoffreyRush }
+	{ name: 'Geoffrey Rush', image: geoffreyRush },
+	{ name: 'Marilyn Monroe', image: marilynMonroe },
+	{ name: 'Daniel Tammet', image: danielTammet }
 ];
