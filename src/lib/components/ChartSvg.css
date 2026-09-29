@@ -1,0 +1,590 @@
+:global(.chart-svg) {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  user-select: none;
+}
+:global(.chart-svg) svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+  :global(.chart-svg .personGroup),
+  :global(.chart-svg .linkPhotoItem) {
+    pointer-events: auto;
+  }
+  :global(.chart-svg .personLabel) {
+    font-family: var(--font-body);
+    font-size: 12px;
+    fill: var(--text);
+    opacity: 0.7;
+    text-anchor: middle;
+    pointer-events: none;
+    user-select: none;
+  }
+  :global(.chart-svg .personTile) {
+    cursor: default;
+  }
+  :global(.chart-svg .headerText) {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: central;
+  }
+  :global(.chart-svg .leadText) {
+    font-family: var(--font-body);
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: central;
+    opacity: 0;
+  }
+  :global(.chart-svg .synText),
+  :global(.chart-svg .aesthesiaText) {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    letter-spacing: 1px;
+    fill: var(--text);
+    text-anchor: start;
+    dominant-baseline: central;
+    opacity: 0;
+  }
+  :global(.chart-svg .etymologyCaption) {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: var(--text-caption, 15px);
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: central;
+    opacity: 0;
+  }
+  :global(.chart-svg .etymologyLabel) {
+    font-family: var(--font-body);
+    font-size: var(--text-lead, 24px);
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: central;
+    opacity: 0;
+  }
+  :global(.chart-svg .whatIsText),
+  :global(.chart-svg .titleQuestion) {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    fill: var(--text);
+    text-anchor: start;
+    dominant-baseline: central;
+    opacity: 0;
+  }
+  :global(.chart-svg .senseIcon) {
+    opacity: 0;
+  }
+  :global(.chart-svg .senseIconBg) {
+    fill: #fff;
+    stroke: var(--grey);
+    stroke-width: 1.5;
+    opacity: 0;
+  }
+  :global(.chart-svg .senseIconPath) {
+    stroke: none;
+  }
+  :global(.chart-svg .senseIconLabel) {
+    font-family: var(--font-body);
+    font-size: var(--text-lead, 24px); /* matches "together"/"perception" */
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: hanging;
+  }
+  :global(.chart-svg .closingLine) {
+    font-family: var(--font-body);
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: central;
+    opacity: 0;
+  }
+  :global(.chart-svg .closingSubline) {
+    font-family: var(--font-body);
+    font-style: italic; /* Bryony: "put (or more than one) in italics" */
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: central;
+    opacity: 0;
+  }
+  :global(.chart-svg .peopleIconsGroup) {
+    opacity: 0;
+  }
+  :global(.chart-svg .personIconPath) {
+    fill: var(--text);
+    stroke: none;
+  }
+  :global(.chart-svg .quoteBubble) {
+    opacity: 0;
+  }
+  :global(.chart-svg .quoteBubblePath) {
+    /* Bryony: "can the quote paths be white fill please" — was the page's
+       own ivory background tint (var(--background)), same literal-#fff
+       treatment .sightSubIconBg already uses for the same "a plain white
+       card" look. */
+    fill: #fff;
+    stroke: var(--grey);
+    stroke-width: 1.5;
+  }
+  :global(.chart-svg .quoteLine) {
+    font-family: var(--font-body);
+    font-style: italic;
+    fill: var(--text);
+    text-anchor: start;
+    dominant-baseline: central;
+  }
+  :global(.chart-svg .quoteWord) {
+    opacity: 0;
+  }
+  :global(.chart-svg .sightCircle) {
+    /* Bryony: "the big background circle enclosing the 3 sub category
+       circles... remove the stroke and make the fill a slightly
+       darker hue than the background... accessible but subtle, not
+       confused with the link lines" — `backgroundTint` (theme.js) is
+       exactly that: background's own hue, ~8% darker, so this circle
+       reads as a shade of the page rather than an outlined ring, and
+       stays clearly distinct from the grey link lines. */
+    fill: var(--backgroundTint);
+    stroke: none;
+    opacity: 0;
+  }
+  :global(.chart-svg .sightSubIconsGroup) {
+    opacity: 0;
+  }
+  :global(.chart-svg .sightSubIconBg) {
+    fill: #fff;
+    stroke: var(--grey);
+    stroke-width: 1.5;
+  }
+  :global(.chart-svg .sightSubIconPath) {
+    fill: var(--purple, #6A488C);
+    stroke: none;
+  }
+  :global(.chart-svg .sightSubIconLabel) {
+    /* Bryony: "make them 15px and centre them below the icon circles,
+       also color them the fisher price purple see how it looks" — 15px
+       is the type scale's own --text-caption step (theme.js), so this
+       stays in step with every other fixed-size label rather than a
+       magic number; --purple is the same accent .sightSubIconPath
+       itself already uses. */
+    font-family: var(--font-body);
+    font-size: var(--text-caption, 15px);
+    fill: var(--purple, #6a488c);
+    text-anchor: middle;
+    dominant-baseline: hanging;
+  }
+  :global(.chart-svg .sightLabel) {
+    /* Bryony: "disconnect with the header font on the last few steps -
+       stick with the same as step 1" — matches .headerText now (Fredoka,
+       weight 600), not the body serif. */
+    font-family: var(--font-heading);
+    font-weight: 600;
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: central;
+    opacity: 0;
+  }
+  :global(.chart-svg .linksGroup) {
+    opacity: 0;
+  }
+  :global(.chart-svg .linkArrow) {
+    fill: none;
+    stroke: var(--grey);
+    stroke-width: 2.5;
+    /* butt, not round: a round cap draws a small semicircle PAST the
+       path's own endpoint in the direction of travel — and the
+       arrowhead's tip sits exactly at that endpoint (marker-end,
+       orient="auto") — so the round cap poked a sliver of line out past
+       the arrow's point. Bryony: "you can see the line emerging from
+       the end of the arrow." Butt ends the stroke exactly at the
+       endpoint, right where the tip is. */
+    stroke-linecap: butt;
+  }
+  :global(.chart-svg .linkArrowheadPath) {
+    fill: var(--grey);
+    stroke: none;
+  }
+  :global(.chart-svg .linkPhotosGroup) {
+    opacity: 0;
+  }
+  :global(.chart-svg .linkPhotoTile) {
+    /* Bryony: "lets take away any stroke/outline in all cases" — was a
+       thin background-colour edge so overlapping photos in the fan
+       still read as separate cards; dropped altogether, everywhere,
+       rather than just thinned or made conditional. */
+    stroke: none;
+  }
+  :global(.chart-svg .publicationsTitle) {
+    /* Bryony: "disconnect with the header font on the last few steps -
+       stick with the same as step 1" — matches .headerText now (Fredoka,
+       weight 600), not the body serif. */
+    font-family: var(--font-heading);
+    font-weight: 600;
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: central;
+    opacity: 0;
+  }
+  /* Step 7's axes: each group's own opacity (set by setPublicationsProgress())
+     covers its ticks + label together — see the template comment.
+     `.pubXAxisLine` is a grey hairline per the dataviz skill ("gridlines /
+     axes: one-step-off-surface gray, hairline, recessive"); the y-tick
+     numbers use `grey` too (never a live opacity on top of it — that
+     would fight the group's own JS-driven fade) so they read as muted
+     without contending with the fade-in. The x-tick text and the y-axis
+     label are each a deliberately different, specific colour per Bryony
+     (see their own rules below), not this shared muted grey.
+   */
+  :global(.chart-svg .pubXAxisGroup),
+  :global(.chart-svg .pubYAxisGroup) {
+    opacity: 0;
+  }
+  :global(.chart-svg .pubXAxisLine),
+  :global(.chart-svg .pubYAxisLine) {
+    stroke: var(--grey);
+    stroke-width: 1;
+  }
+  :global(.chart-svg .pubXTickLabel) {
+    /* Bryony: "no ticks on the x axis, text much bigger and closer to
+       the axis line" — bumped from the shared caption size up to lead
+       size. Kept `text`, not `grey`, now that it's this prominent — a
+       muted grey at this size read as unfinished rather than "clean". */
+    font-family: var(--font-body);
+    font-size: var(--text-lead, 24px);
+    font-variant-numeric: tabular-nums;
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: hanging;
+  }
+  :global(.chart-svg .pubYTick) {
+    font-family: var(--font-body);
+    /* Bryony: "make the y axis ticks a bit darker... and bigger - same
+       as x" — matches .pubXTickLabel's size exactly now, and `text`
+       (from the palette) instead of the lighter `grey`. */
+    font-size: var(--text-lead, 24px);
+    font-variant-numeric: tabular-nums;
+    fill: var(--text);
+    /* Bryony: "y axis should be on the right" — numbers now sit to the
+       right of the plot and read left-to-right away from it, so anchor
+       start (was end, when they sat left of the axis reading toward it). */
+    text-anchor: start;
+    dominant-baseline: central;
+  }
+  :global(.chart-svg .pubYAxisLabel) {
+    /* Bryony: "label should be black and transformed 180, larger font,
+       aligned top and left of the y axis" — literal black (not the
+       `text` ink token) since she named the colour specifically, same
+       as the quote bubble's literal white; text-anchor start (was
+       middle) is what makes it start AT its y and read downward instead
+       of centring on it — see layoutPublications()'s own comment for the
+       rotate(-90) -> rotate(90) half of this. */
+    font-family: var(--font-body);
+    font-size: var(--text-lead, 24px);
+    fill: #000;
+    text-anchor: start;
+    dominant-baseline: hanging;
+  }
+  :global(.chart-svg .pubLine) {
+    /* Fisher-Price blue, per Bryony — the dataviz skill's own line spec:
+       2px, round join/cap. Never opacity-driven (the clip-path wipe is
+       the reveal mechanism), so a plain, permanent full-strength stroke. */
+    fill: none;
+    stroke: var(--blue);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  :global(.chart-svg .pubArea) {
+    /* "Area fill: the series hue at ~10% opacity (a wash, never a
+       saturated block)" per the dataviz skill — a flat, permanent value
+       (not progress-driven, same reasoning as .pubLine above). */
+    fill: var(--blue);
+    stroke: none;
+    opacity: 0.1;
+  }
+  :global(.chart-svg .pubMarker) {
+    opacity: 0;
+  }
+  :global(.chart-svg .pubMarkerLine) {
+    /* Recessive, like the axis line — this is an annotation, not one of
+       the plotted marks. Dashed so it reads as a reference, not data. */
+    stroke: var(--grey);
+    stroke-width: 1;
+    stroke-dasharray: 4 3;
+  }
+  :global(.chart-svg .pubMarkerLabel) {
+    font-family: var(--font-body);
+    font-size: var(--text-caption, 15px);
+    /* Bryony: "please could the paper label fill be the grey instead" —
+       back to `grey` (recessive/footnote-style), not `text`. */
+    fill: var(--grey);
+    /* Bryony: "The 3 paper labels should be rotated 180 and left of the
+       line - same as the y axis label" — rotate(-90) is applied via the
+       transform set in layoutPublications() (mirrors .pubYAxisLabel's
+       rotate(90)); text-anchor end is what keeps the label "aligned
+       top" under that flipped rotation — see the comment there. */
+    text-anchor: end;
+  }
+  :global(.chart-svg .pubCitation) {
+    opacity: 0;
+  }
+  :global(.chart-svg .pubCitationLine) {
+    stroke: var(--grey);
+    stroke-width: 1;
+    stroke-dasharray: 4 3;
+  }
+  :global(.chart-svg .pubCitationLabel) {
+    font-family: var(--font-body);
+    font-size: var(--text-caption, 15px);
+    /* Bryony: "please could the paper label fill be the grey instead" —
+       see .pubMarkerLabel above. */
+    fill: var(--grey);
+    /* Bryony: "The 3 paper labels should be rotated 180 and left of the
+       line - same as the y axis label" — see .pubMarkerLabel above. */
+    text-anchor: end;
+  }
+  :global(.chart-svg .pubFootnote) {
+    opacity: 0;
+    font-family: var(--font-body);
+    font-size: var(--text-caption, 15px);
+    fill: var(--grey);
+    text-anchor: start;
+  }
+  :global(.chart-svg .pubFootnoteLink) {
+    /* Bryony: "could the download link just be on the pre-1942 part of
+       the data source label, no need for an extra line" — same grey as
+       the rest of the footnote; underline is the only cue this part,
+       unlike the rest of the sentence, is clickable. */
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  :global(.chart-svg .brainTitle) {
+    /* Matches .publicationsTitle/.headerText — Fredoka, weight 600, per
+       Bryony's "stick with the same as step 1" rule for every step
+       title, not just the publications one. */
+    font-family: var(--font-heading);
+    font-weight: 600;
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: central;
+    opacity: 0;
+  }
+  :global(.chart-svg .brainSubtitle) {
+    /* Citation-style subtitle — same recessive grey as the pub-chart's
+       own citation/marker labels, smaller than the title. */
+    font-family: var(--font-body);
+    fill: var(--grey);
+    text-anchor: middle;
+    dominant-baseline: central;
+    opacity: 0;
+  }
+  :global(.chart-svg .brainIconGroup) {
+    opacity: 0;
+  }
+  :global(.chart-svg .brainIconPath) {
+    /* Bryony: "brain fill is white" + "light stroke which is our grey" —
+       matches the approved preview exactly. */
+    fill: #fff;
+    stroke: var(--grey);
+    stroke-width: 3;
+  }
+  :global(.chart-svg .brainBgRect) {
+    /* "our darker background" — backgroundTint, per the preview. */
+    fill: var(--backgroundTint);
+  }
+  :global(.chart-svg .brainBgRectLeft) {
+    opacity: 1;
+  }
+  :global(.chart-svg .brainBgRectRight) {
+    opacity: 0.5;
+  }
+  :global(.chart-svg .brainBgLabel) {
+    font-family: var(--font-body);
+    font-size: 26px;
+    font-weight: 600;
+    fill: var(--text);
+    dominant-baseline: hanging;
+  }
+  :global(.chart-svg .brainBgLabelLeft) {
+    text-anchor: start;
+  }
+  :global(.chart-svg .brainBgLabelRight) {
+    text-anchor: end;
+  }
+  :global(.chart-svg .brainDotsGroup) {
+    opacity: 0;
+  }
+  :global(.chart-svg .brainDot) {
+    /* Bryony: "let's remove the stroke" — fill/radius are set per-dot in
+       layoutBrain() (colour by effect, size by volume), never here. */
+    stroke: none;
+    /* Bryony: "I'd also love the 'bubbles' to pulse slightly. not too in
+       your face but a little bit" — a gentle, slow scale breathe rather
+       than an opacity flash, staggered per-dot (see layoutBrain()'s own
+       animation-delay). transform-box/-origin so each dot scales around
+       its OWN centre, not the svg's (0,0) origin. */
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: brainDotPulse 3.2s ease-in-out infinite;
+  }
+  @keyframes brainDotPulse {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.08);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :global(.chart-svg .brainDot) {
+      animation: none;
+    }
+  }
+  :global(.chart-svg .brainLegendTextGroup) {
+    opacity: 0;
+  }
+  :global(.chart-svg .brainEffectValue),
+  :global(.chart-svg .brainEffectCaption),
+  :global(.chart-svg .brainVolumeValue),
+  :global(.chart-svg .brainVolumeCaption) {
+    /* Bryony: "the text is too big on the legends... we might have to
+       make a smaller one" — the smallest step in the type scale
+       (--text-micro, 12px — theme.js), same fixed real size regardless
+       of how big or small the icon itself is currently rendered (see
+       layoutBrain()'s own comment on why this text lives in screen
+       space now, not the icon's scaled local space). */
+    font-family: var(--font-body);
+    font-size: var(--text-micro, 12px);
+    fill: var(--grey);
+  }
+  :global(.chart-svg .brainEffectValue) {
+    /* Sits just above the bar — Bryony gave the exact 2 values (3.7,
+       4.8) and no separate heading, so these ARE the legend's labels.
+       Default (alphabetic) baseline, not hanging: the label's baseline
+       sits right at its y, so the text itself reads ABOVE the bar
+       rather than down into it. */
+    font-variant-numeric: tabular-nums;
+  }
+  :global(.chart-svg .brainEffectValueMin) {
+    text-anchor: start;
+  }
+  :global(.chart-svg .brainEffectValueMax) {
+    text-anchor: end;
+  }
+  :global(.chart-svg .brainEffectCaption),
+  :global(.chart-svg .brainVolumeCaption) {
+    text-anchor: start;
+    dominant-baseline: hanging;
+  }
+  :global(.chart-svg .brainVolumeCircle) {
+    /* Size-only legend item — deliberately uncoloured (fill: none) so it
+       never reads as also encoding the Effect legend's colour meaning. */
+    fill: none;
+    stroke: var(--grey);
+    stroke-width: 1.5;
+  }
+  :global(.chart-svg .brainEffectTitle),
+  :global(.chart-svg .brainVolumeTitle) {
+    /* Bryony: "add effect + volume legend label titles" — a heading for
+       each legend visual, set apart from its grey value/caption text
+       (heading font, weight, --text colour) but still at the same fixed
+       micro size so it doesn't compete with the chart's real titles.
+       Default (alphabetic) baseline: each one's y was computed in
+       layoutBrain() as a baseline sitting one row above its value line. */
+    font-family: var(--font-heading);
+    font-weight: 600;
+    font-size: var(--text-micro, 12px);
+    fill: var(--text);
+  }
+  :global(.chart-svg .brainEffectTitle) {
+    text-anchor: start;
+  }
+  :global(.chart-svg .brainVolumeTitle) {
+    text-anchor: middle;
+  }
+  :global(.chart-svg .brainVolumeValue) {
+    /* "just below the top of the circle" — sits inside its own circle,
+       near the top, so hanging (grows downward from y) is right here,
+       unlike the Effect value labels above. */
+    font-variant-numeric: tabular-nums;
+    text-anchor: middle;
+    dominant-baseline: hanging;
+  }
+  :global(.chart-svg .connectionsTitle) {
+    /* Matches .brainTitle/.publicationsTitle/.headerText — same "stick
+       with the same as step 1" rule for every step title. */
+    font-family: var(--font-heading);
+    font-weight: 600;
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: central;
+    opacity: 0;
+  }
+  :global(.chart-svg .magnetTray) {
+    /* The tray body — same warm-tint fill as every other "shade of the
+       page" shape in this file, with a grey outline for definition
+       ("some lines/shading" — the outline + dividers are the lines, this
+       fill + the letters' own drop-shadow are the shading). Bryony:
+       "some sort of shading or drop shadow style effect might be good"
+       (looking at the real photo again — its tray sits raised off the
+       surface behind it) — a soft drop-shadow gives the whole tray that
+       same lifted, physical-object feel, on top of the letters' own. */
+    fill: var(--backgroundTint);
+    stroke: var(--grey);
+    stroke-width: 1.5;
+    opacity: 0;
+    filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.2));
+  }
+  :global(.chart-svg .magnetTrayDividers) {
+    opacity: 0;
+  }
+  :global(.chart-svg .magnetTrayDivider) {
+    /* The tray's own compartment walls, echoing the real photo's — now
+       left/right edges (.magnetTrayEdgeLeft/Right) as well as the
+       between-row dividers, per Bryony's "add a vertical line left and
+       right to mimic the tray edges". */
+    stroke: var(--grey);
+    stroke-width: 1.5;
+  }
+  :global(.chart-svg .magnetLetterGroup) {
+    opacity: 0;
+  }
+  :global(.chart-svg .magnetLetter) {
+    /* Bryony: "make your own version of the fisher price magnet box with
+       our header font" — bold caps in the same face every other title in
+       this file uses, one flat colour per letter (set once in
+       buildMagnetLetters(), never re-set — see that function's own
+       comment), with a soft drop-shadow for a raised, "magnet" feel.
+       weight 600, not 700 — index.html only loads Fredoka 500/600, so 700
+       was never a real weight here (the letter-width measurements used to
+       size these letters were taken at 600 to match). */
+    font-family: var(--font-heading);
+    font-weight: 600;
+    text-anchor: middle;
+    dominant-baseline: central;
+    filter: drop-shadow(1px 2px 1.5px rgba(0, 0, 0, 0.28));
+  }
+  :global(.chart-svg .personTooltip) {
+    /* Hidden until showPersonTooltip() raises it; pointer-events: none so
+       hovering the tooltip itself (it can sit right over the cursor)
+       never fires a mouseleave on the tile/photo underneath it. */
+    opacity: 0;
+    pointer-events: none;
+  }
+  :global(.chart-svg .personTooltipBg) {
+    /* Bryony: "white background, grey border on tooltip, small text". */
+    fill: #fff;
+    stroke: var(--grey);
+    stroke-width: 1;
+  }
+  :global(.chart-svg .personTooltipLine) {
+    font-family: var(--font-body);
+    font-size: var(--text-caption, 15px);
+    fill: var(--text);
+    text-anchor: start;
+    dominant-baseline: hanging;
+  }

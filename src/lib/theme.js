@@ -7,6 +7,15 @@ export const colors = {
 	background: '#F7F3EC',
 	text: '#2B2A28',
 
+	// A subtle fill for shapes that need to read as "a shade of the
+	// page" rather than an outlined line/stroke — background's own hue
+	// and saturation, lightness dropped ~8%. Bryony: "make the fill a
+	// slightly darker hue than the background... accessible but
+	// subtle, not confused with the link lines" (which use `grey`
+	// below) — added to the palette per her own request rather than
+	// left as a one-off literal in component CSS.
+	backgroundTint: '#EBE1CF',
+
 	// Started as the exact section-title grey from the Setup spec
 	// (docs/milestones/setup-spec.pdf) — colour-picked from the
 	// rendered PDF: #868580. Lightened from there per Bryony ("a
@@ -51,6 +60,11 @@ export const spacing = {
 // The type scale from Setup, as actual values (this had only ever lived
 // in the visual-system mockup until now). Px sizes, smallest to largest.
 export const typeScale = {
+	// Bryony: "the text is too big on the legends... we might have to
+	// make a smaller one" — one step below caption, for small in-chart
+	// annotations (the brain step's dot-legend labels) that read fine
+	// even at caption size's own smallest use.
+	micro: 12,
 	caption: 15,
 	body: 19,
 	lead: 24,

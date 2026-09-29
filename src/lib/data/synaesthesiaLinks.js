@@ -16,19 +16,20 @@ function person(name) {
 }
 
 const edges = [
-	{ from: 'sound', to: 'colors', names: ['Lorde', 'Billy Joel', 'David Hockney', 'Pharrell Williams', 'Lady Gaga', 'Billie Eilish', 'Wassily Kandinsky'] },
+	// Kandinsky's own direction is colour -> sound, reverse of this
+	// merged edge's from/to — reverseLabel flips his tooltip text only.
+	{ from: 'sound', to: 'colors', names: ['Lorde', 'Billy Joel', 'David Hockney', 'Pharrell Williams', 'Lady Gaga', 'Billie Eilish', { name: 'Wassily Kandinsky', reverseLabel: true }] },
 	{ from: 'lettersNumbers', to: 'colors', names: ['Billy Joel', 'Daniel Tammet', 'Geoffrey Rush', 'Richard Feynman', 'Vladimir Nabokov'] },
 	{ from: 'lettersNumbers', to: 'objects', names: ['Daniel Tammet', 'Geoffrey Rush', 'Vladimir Nabokov'] },
 	{ from: 'lettersNumbers', to: 'sound', names: ['Daniel Tammet'] },
 	{ from: 'sound', to: 'objects', names: ['David Hockney', 'Billie Eilish'] },
 	{ from: 'taste', to: 'colors', names: ['Marilyn Monroe'] },
 	{ from: 'smell', to: 'colors', names: ['Billie Eilish'] },
-	{ from: 'smell', to: 'objects', names: ['Billie Eilish'] },
 	{ from: 'lettersNumbers', to: 'touch', names: ['Daniel Tammet'] }
 ];
 
 export const synaesthesiaLinks = edges.map((e) => ({
 	from: e.from,
 	to: e.to,
-	people: e.names.map(person)
+	people: e.names.map((n) => (typeof n === 'string' ? person(n) : { ...person(n.name), reverseLabel: n.reverseLabel }))
 }));

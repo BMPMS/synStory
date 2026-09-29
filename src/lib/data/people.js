@@ -14,17 +14,20 @@ import geoffreyRush from '../assets/people/geoffrey-rush.jpg';
 import marilynMonroe from '../assets/people/marilyn-monroe.jpg';
 import danielTammet from '../assets/people/daniel-tammet.jpg';
 
+// `profession` — Bryony's own tooltip copy: "just their profession", then
+// later "name - occupation" once the step1 tile label has faded out (see
+// ChartSvg's personGroup hover handler).
 export const people = [
-	{ name: 'David Hockney', image: davidHockney },
-	{ name: 'Wassily Kandinsky', image: wassilyKandinsky },
-	{ name: 'Vladimir Nabokov', image: vladimirNabokov },
-	{ name: 'Richard Feynman', image: richardFeynman },
-	{ name: 'Billie Eilish', image: billieEilish },
-	{ name: 'Lady Gaga', image: ladyGaga },
-	{ name: 'Pharrell Williams', image: pharrellWilliams },
-	{ name: 'Billy Joel', image: billyJoel },
-	{ name: 'Lorde', image: lorde },
-	{ name: 'Geoffrey Rush', image: geoffreyRush },
-	{ name: 'Marilyn Monroe', image: marilynMonroe },
-	{ name: 'Daniel Tammet', image: danielTammet }
+	{ name: 'David Hockney', image: davidHockney, profession: 'artist' },
+	{ name: 'Wassily Kandinsky', image: wassilyKandinsky, profession: 'artist' },
+	{ name: 'Vladimir Nabokov', image: vladimirNabokov, profession: 'writer' },
+	{ name: 'Richard Feynman', image: richardFeynman, profession: 'scientist' },
+	{ name: 'Billie Eilish', image: billieEilish, profession: 'singer' },
+	{ name: 'Lady Gaga', image: ladyGaga, profession: 'singer' },
+	{ name: 'Pharrell Williams', image: pharrellWilliams, profession: 'singer' },
+	{ name: 'Billy Joel', image: billyJoel, profession: 'singer' },
+	{ name: 'Lorde', image: lorde, profession: 'singer' },
+	{ name: 'Geoffrey Rush', image: geoffreyRush, profession: 'actor' },
+	{ name: 'Marilyn Monroe', image: marilynMonroe, profession: 'actor' },
+	{ name: 'Daniel Tammet', image: danielTammet, profession: 'writer' }
 ];

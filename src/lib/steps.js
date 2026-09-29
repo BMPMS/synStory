@@ -33,7 +33,7 @@ export const step1 = {
 
 // Step 3: SYNAESTHESIA rises and shrinks into the header's old slot,
 // "What is" fades in beside it so it reads as one line — "What is
-// SYNAESTHESIA" — then "It's when one of your 5 senses" and the 5 sense
+// SYNAESTHESIA?" — then "It's when one of yourFIVE SENSES" and the 5 sense
 // icons appear, and finally the closing "consistently triggers another
 // sense (or more than one)" lines.
 export const step3 = {
@@ -43,11 +43,10 @@ export const step3 = {
   title: { start: 0.0, end: 0.35 },
   whatIs: { fadeIn: { start: 0.15, end: 0.4 } },
   senses: {
-    text: "It's when one of your 5 senses",
-    fadeIn: { start: 0.45, end: 0.6 },
-    // Sits this much higher than "They've all been..." did, for better
-    // spacing above the icon row below it.
-    riseBy: 48
+    text: "It's when one of the FIVE SENSES",
+    // starts right as whatIs finishes (step3.whatIs.fadeIn.end)
+    fadeIn: { start: 0.4, end: 0.6 },
+    riseBy: 48 // higher than step1's lead line, clears the icon row
   },
   icons: {
     // Five, quickly, one after another.
@@ -60,7 +59,7 @@ export const step3 = {
   // Icons finish fading in by 0.5 + 4*0.03 + 0.08 = 0.7 — the closing
   // lines pick up shortly after that, once the row has properly landed.
   closing: {
-    line: 'consistently triggers another sense',
+    line: 'consistently triggers another SENSE',
     fadeIn: { start: 0.72, end: 0.85 },
     subline: '(or more than one)',
     sublineFadeIn: { start: 0.85, end: 0.95 }
@@ -145,6 +144,14 @@ export const step5 = {
   },
   reveal: {
     fadeIn: { start: 0.2, end: 0.4 }
+  },
+  // Bryony: "the famous synetheses should only start to fade in AFTER
+  // letter+numbers is fully visible" — starts exactly where reveal.fadeIn
+  // ends (t=0.4, the moment the lettersNumbers sub-icon — last in the
+  // stagger — finishes), so the header swaps straight from the "splits
+  // into 3" text at full opacity into this fade-in with no dead gap.
+  famousHeader: {
+    fadeIn: { start: 0.4, end: 0.6 }
   }
 };
 
@@ -155,6 +162,129 @@ export const step6 = {
   reveal: {
     fadeIn: { start: 0.1, end: 0.5 }
   }
+};
+
+// Step 7: everything from the story so far fades out, the new title
+// ("This is not old news...") fades in, then the publications line/area
+// chart builds up in three beats, per Bryony — x-axis first, then the
+// line + area drawing in left to right, then the y-axis (with its
+// rotated "Number of publications" label) last.
+export const step7 = {
+  storyFadeOut: { start: 0, end: 0.12 },
+  title: { fadeIn: { start: 0.08, end: 0.22 } },
+  xAxis: { fadeIn: { start: 0.25, end: 0.35 } },
+  // Bryony: "the line/area reveal is taking too long... could it end at
+  // Step 8 100%" — was ending exactly at t=1 (this step's own end), which
+  // left no margin, so it was still visibly catching up once scrolled
+  // into step8. Pulled in to finish with buffer before the step itself
+  // ends.
+  draw: { start: 0.38, end: 0.85 },
+  // Bryony: "the y axis doesn't appear until step 9 25%, it should start
+  // appearing around step 8 75%... both that and the line reveal should
+  // end at the same time" — was living in step8 (starting right at 0%
+  // there); moved here, ending together with draw above.
+  yAxis: { fadeIn: { start: 0.75, end: 0.85 } }
+};
+
+// Step 8: once the publications chart has fully drawn, mark 2 specific
+// publications on it, one at a time — Bryony: "mark 2 publications -
+// Rouw & Scholte (2007) and Witthoft, Winawer & Eagleman (2015)... show
+// label for 1st, then 2nd.." Neither fades back out once shown. The
+// step's own intro ("Let's focus...") isn't timed here — it's an instant
+// swap of .publicationsTitle's text the moment the step starts, done in
+// ChartSvg's setPublicationsMarkersProgress() itself.
+export const step8 = {
+  // Bryony: "wait for line + area fully in, THEN change the header,
+  // THEN reveal the [1892] marker" — the line (and now the y-axis, see
+  // step7) already finished by the time this step starts, so marker
+  // goes right at the front here; title swap to the marker text is
+  // instant, at marker.fadeIn.start (t=0).
+  marker: { fadeIn: { start: 0, end: 0.06 } },
+  // Bryony: "let's wait till step 9 50% to bring in Let's focus (and the
+  // two lines)" — title swap to the "let's focus" text and both citation
+  // lines now all held until the step's midpoint, well clear of the
+  // marker/y-axis fade-in above (was yAxis.fadeIn.end, 0.15 — too soon).
+  titleSwap: 0.5,
+  citation1: { fadeIn: { start: 0.5, end: 0.68 } },
+  citation2: { fadeIn: { start: 0.75, end: 0.93 } }
+};
+
+// Step 9: the publications chart fades out, then the title comes straight
+// up (it's the header for the whole step). Bryony: "start with a visual
+// of 18 + 18 person icons... leadText should say [36 participants],
+// then [letters, numbers + symbols]... then the participants fade out +
+// the brain stuff fades in as well as the label below the header" — so
+// the intro (leadText + 2 group labels + 36 icons) fills the same slot
+// the subtitle/brain will later occupy, then clears for them. subtitle
+// now shares brain's own beat instead of appearing earlier with the title.
+export const step9 = {
+  chartFadeOut: { start: 0, end: 0.08 },
+  // Bryony: "We lead with Is synesthese brain activity different - fade
+  // in the people." — the header carries 4 stages in order: the real
+  // question first (this fade-in), then "36 participants", then "letters,
+  // numbers + symbols", then "while undergoing fMRI scanning" (which also
+  // triggers the scan animation below). brainSubtitle shares this exact
+  // fade-in ramp too (see setBrainProgress) and never fades back out.
+  title: { fadeIn: { start: 0.04, end: 0.12 } },
+  intro: {
+    fadeIn: { start: 0.12, end: 0.22 }, // the 36 icons, right after the question lands
+    // Header text swaps at these instants, no crossfade — same pattern
+    // as every other text swap in the piece (see step3.senses).
+    stage1At: 0.3, // -> "The study worked with 36 participants"
+    stage2At: 0.42, // -> "They were shown letters, numbers + symbols"
+    stage3At: 0.54, // -> "while undergoing fMRI scanning"
+    // Bryony: "add some cool animation which scanned the people icons
+    // left to right" — a light sweeps across all 36 icons over this
+    // window, synced with the stage3 text landing.
+    scan: { start: 0.54, end: 0.66 },
+    fadeOut: { start: 0.7, end: 0.8 }
+  },
+  // Bryony: "made the brain fade in quicker" — tighter span than before.
+  brain: { fadeIn: { start: 0.78, end: 0.83 } },
+  dots: { fadeIn: { start: 0.88, end: 0.98 } }
+};
+
+// Step 10: the brain-regions scene fades out, then the new "when do
+// synaesthete connections form?" scene fades in — title first, then the
+// drawn magnet-letter tray (Bryony's own mock-up of her Fisher-Price
+// reference photo, in the app's own header font — see magnetLetters.js).
+// Just getting the beat on the page for now — same shape as step9.
+export const step10 = {
+  chartFadeOut: { start: 0, end: 0.12 },
+  title: { fadeIn: { start: 0.15, end: 0.35 } },
+  tray: { fadeIn: { start: 0.35, end: 0.6 } }
+};
+
+// Step 11 ("Step 12" in Bryony's own 1-indexed count): step10's tray
+// scene fades out, then its own 26 magnet letters (the SAME
+// magnetLetterGroups elements — see buildMagnetLetters()/layoutHeatmap()
+// in ChartSvg) shrink and travel from their tray-grid position onto a
+// ring. Once they've landed, a per-respondent "heatmap" builds around
+// that ring: each letter gets 326 thin radial cells (one per magnetAgg
+// respondent — see magnetResponses.js), initially in raw/unsorted order
+// (colorOrder false). Scrolling on from there morphs those cells first
+// into match-clustered order (colorOrder true — every match recolours to
+// that letter's own template colour, every non-match to a neutral grey),
+// then again into a horizontal bar chart (colorBar — row = letter,
+// ordered by matchCount per barLetterOrder, bar length = matchCount).
+// Bryony asked for exactly these 4 beats, scroll-driven rather than the
+// original Observable cell's own dropdown control.
+export const step11 = {
+  // Tray rect + divider lines fade out while the 26 letters shrink and
+  // travel from their tray-grid position to their ring position — no
+  // separate chartFadeOut beat needed here (unlike every step before it):
+  // there's no earlier scene to clear, the tray IS step10's own scene,
+  // continuously morphing into this one.
+  trayToRing: { start: 0.06, end: 0.3 },
+  // The colorOrder-FALSE view (326 per-respondent cells per letter, in
+  // raw/unsorted order) fades in right as the letters land on the ring.
+  cellsFadeIn: { start: 0.24, end: 0.36 },
+  // Morphs each letter's 326 cells from raw respondent order (mixed
+  // colours) into match-clustered order (colorOrder true).
+  colorOrderTrue: { start: 0.42, end: 0.64 },
+  // Morphs the ring (26 wedges, angle = letter, radius = respondent
+  // rank) into a horizontal bar chart (row = letter, length = matchCount).
+  colorBar: { start: 0.72, end: 0.96 }
 };
 
 // A phase that ramps in over `in_`, then unwinds over `out` — used so a

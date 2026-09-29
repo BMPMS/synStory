@@ -29,6 +29,37 @@
           "start": "2026-09-22T15:51:47Z",
           "end": null,
           "painPoints": null
+        },
+        {
+          "step": 4,
+          "start": "2026-09-24T07:38:35Z",
+          "end": "2026-09-24T16:37:08Z",
+          "painPoints": "Legend text sizing/positioning (font size, wrap width, bottom-anchored padding) took several rounds of back-and-forth to get right; a real bug found in the shared wrap() text-wrapping helper (3rd+ lines were landing on top of each other); brief drop in the connection to this Mac mid-session, resumed once it reconnected."
+        },
+        {
+          "step": 5,
+          "start": "2026-09-25T07:47:55Z",
+          "end": "2026-09-25T15:00:23Z",
+          "painPoints": "Getting the magnet-letter sizing right without guessing — ended up measuring real glyph ink extents via canvas pixel scanning rather than trusting SVG getBBox(), which turned out to return the same box for every letter regardless of shape. Also a genuine cross-device bug: letters were sized correctly on desktop but not on mobile, traced to sizing off the wrong width variable under the height-clamped case."
+        },
+        {
+          "step": 6,
+          "start": "2026-09-28T07:45:00Z",
+          "end": "2026-09-28T14:08:00Z",
+          "painPoints": "A real bug shipped to the live page: a variable (leadTextShowingSenses) used but never declared, which would have thrown on every scroll tick and broken the ‘It’s when one of your FIVE SENSES’ text block (reported as misaligned/bunched letters) — caught during my own verification pass and fixed, confirmed correct afterwards with an isolated browser test, but only after it had already been seen live. Two tooltip requests (name/job at the bottom, bold name on the network) turned out to already be implemented from earlier work — no changes needed, just confirmed against the code. Brief drop in the connection to this Mac mid-session, resumed once it reconnected. Also had to empirically verify getComputedTextLength() behaviour on nested tspans in a real browser before trusting the quote-punctuation-colour fix, rather than assuming."
+        }
+      ]
+    },
+    {
+      "stage": "Battery Test Tool",
+      "start": "2026-09-25T15:00:23Z",
+      "end": null,
+      "steps": [
+        {
+          "step": 1,
+          "start": "2026-09-25T15:00:23Z",
+          "end": "2026-09-25T17:43:00Z",
+          "painPoints": "Built the whole standalone app (4 screens, colour-consistency scoring, its own multi-page Vite entry) plus a custom hue/saturation colour wheel after the native <input type=\"color\"> picker turned out to look like a plain slider on macOS Safari rather than the polished wheel first assumed. The wheel's colour maths needed a rework partway through so it could reach browns/navy/olive, not just white-blended tints. Recurring friction all afternoon: pushing a file to the Mac would sometimes report success but land as the old, stale content — needed a retry (occasionally with force) almost every time; cause still unconfirmed."
         }
       ]
     }

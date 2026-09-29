@@ -87,7 +87,8 @@ main {
   transform: translateX(-50%);
   margin: 0;
   font-family: var(--font-body, Georgia, serif);
-  font-size: 20px;
+  /* Bryony: "scroll + arrow on first page should be x1.5 bigger" — was 20px */
+  font-size: 30px;
   letter-spacing: 0.5px;
   color: var(--text, #2B2A28);
   pointer-events: none;
