@@ -24,6 +24,13 @@ export const colors = {
 	// sight-scene circles.
 	grey: '#B6B6B3',
 
+	// Midpoint between text and grey — Bryony: "make the labels for
+	// these publication lines darker grey... somewhere in between our
+	// text colour and our grey." Used for the pub-chart's citation/marker
+	// labels, which needed more presence than `grey` gives without going
+	// as dark as body text.
+	greyDark: '#71706E',
+
 	// accents — mapped to the Fisher-Price magnetic letter research
 	blue: '#196AAD',
 	red: '#D25241',

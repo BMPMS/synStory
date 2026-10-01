@@ -45,16 +45,125 @@ img {
 
 .step {
   height: 100vh;
+  /* Lets step content (e.g. .stepText) sit above the pinned/sticky chart,
+     which otherwise paints on top of plain static siblings regardless of
+     DOM order. Centering here is a safe default for any step that gets
+     content; empty steps are unaffected. */
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Bug fix: z-index above put every step (not just the ones with
+     captions) in front of the pinned chart for hit-testing too, silently
+     blocking hover on it (e.g. the famous-people tooltips). .stepText
+     already ignores pointer events itself, so steps never needed them. */
+  pointer-events: none;
+}
+
+/* Small, semi-opaque text blocks that scroll past the pinned chart, per
+   Bryony's "introduce text steps for step 10 onwards" request. */
+.stepText {
+  max-width: 420px;
+  margin: 0 24px;
+  padding: 16px 22px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 12px;
+  font-family: var(--font-body, Georgia, serif);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text, #2B2A28);
+  text-align: center;
+  pointer-events: none;
+}
+
+/* A step carrying several .stepText blocks (one per caption) needs extra
+   scroll room so each gets its own dwell time as it passes the pinned
+   chart — one screen's worth of height per caption. Overrides the base
+   .step's single-block flex centering with absolute positioning instead;
+   shared by the 2- and 3-caption variants below. */
+.step--captions-2,
+.step--captions-3,
+.step--captions-4 {
+  display: block;
+}
+.step--captions-2 .stepText,
+.step--captions-3 .stepText,
+.step--captions-4 .stepText {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* Bryony: the two cards here were appearing before the line/area reveal
+   had even started, then a too-narrow reveal window let a normal scroll
+   jump straight past it, "losing" the animation entirely. The reveal
+   (see step7 in steps.js) now finishes by 35% of this taller step's own
+   scroll, itself a full screen's worth of scroll wide, and the cards sit
+   well past that point so they only start once the chart is drawn. */
+.step--captions-2 {
+  height: 400vh;
+}
+.step--captions-2 .stepText:nth-of-type(1) {
+  top: 200vh;
+}
+.step--captions-2 .stepText:nth-of-type(2) {
+  top: 320vh;
+}
+
+.step--captions-3 {
+  height: 300vh;
+}
+.step--captions-3 .stepText:nth-of-type(1) {
+  top: 60vh;
+}
+.step--captions-3 .stepText:nth-of-type(2) {
+  top: 160vh;
+}
+.step--captions-3 .stepText:nth-of-type(3) {
+  top: 260vh;
+}
+
+/* Step 11 (connections/magnet tray): title+tray reveal (see step10 in
+   steps.js) now finishes by 30% of this step's own scroll, so the 4
+   study-findings cards start only once the tray is fully in view.
+   Bryony: "half the brain hold" — grew from 560vh to 644vh (+84vh);
+   every caption below is at its old top plus that same 84vh, so the
+   rest of the sequence/pacing is unchanged. */
+.step--captions-4 {
+  height: 644vh;
+}
+.step--captions-4 .stepText:nth-of-type(1) {
+  /* Pushed past the brain's fade-out and this step's own title;
+     +84vh for the halved brain hold (was 140vh pre-hold). */
+  top: 224vh;
+}
+.step--captions-4 .stepText:nth-of-type(2) {
+  top: 284vh;
+}
+.step--captions-4 .stepText:nth-of-type(3) {
+  /* Bryony: "less of a gap between the 1st and second step" —
+     +84vh for the halved brain hold. */
+  top: 344vh;
+}
+.step--captions-4 .stepText:nth-of-type(4) {
+  top: 484vh;
+}
+.step--captions-4 .stepText:nth-of-type(5) {
+  top: 584vh;
 }
 
 /* Scrollama's progress for a step is driven by its bottom edge crossing
    the offset trigger line (90% down the viewport, per the setup() call
    in App.svelte) — for the LAST step that needs room to scroll past
    its own bottom, and with nothing after it, the page simply runs out
-   of scroll first and progress gets stuck short of 1, cutting the last
-   quote off mid-reveal. This is never itself visible (the pinned scene
+   of scroll first and progress gets stuck short of 1, cutting the
+   reveal off mid-way. This is never itself visible (the pinned scene
    has already unstuck by the time you'd reach it) — it exists purely
-   to give scroll-tracking room to finish. */
+   to give scroll-tracking room to finish. "Why do I care?" is now a
+   genuine step itself (step 12, see App.svelte), so this buffer's job
+   is unchanged from before — it's just giving ITS progress room to
+   reach 1 instead of the old last step's. */
 .scroll-buffer {
   height: 100vh;
 }

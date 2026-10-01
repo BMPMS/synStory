@@ -121,21 +121,37 @@ export function scoreConsistency(responsesByGrapheme) {
 // approximate read on the score for an engaging result screen, not a
 // clinical cutoff. Real batteries validate their own thresholds against
 // a studied population; this one hasn't been, and says so on screen.
+// "grapheme-colour" is the field's term for it; "letters + numbers ->
+// colour" is the plain-English version used everywhere user-facing (and
+// bolded wherever it's rendered as HTML) — split into detailBefore/
+// detailBold/detailAfter so the results screen can bold it with a real
+// <strong>, not string interpolation.
+const LETTERS_NUMBERS_COLOUR = 'letters + numbers → colour';
+
 export function describeConsistency(overallScore) {
   if (overallScore < 8) {
     return {
       label: 'Highly consistent',
-      detail: 'Your colour choices for the same letter or number stayed remarkably close across all three rounds — the kind of result many people with grapheme-colour synaesthesia show.'
+      detailBefore:
+        'Your colour choices for the same letter or number stayed remarkably close across all three rounds — the kind of result many people with ',
+      detailBold: LETTERS_NUMBERS_COLOUR,
+      detailAfter: ' synaesthesia show.'
     };
   }
   if (overallScore < 20) {
     return {
       label: 'Fairly consistent',
-      detail: 'Your colour choices were noticeably steadier than chance across the three rounds — somewhat more consistent than most people without grapheme-colour synaesthesia tend to be.'
+      detailBefore:
+        'Your colour choices were noticeably steadier than chance across the three rounds — somewhat more consistent than most people without ',
+      detailBold: LETTERS_NUMBERS_COLOUR,
+      detailAfter: ' synaesthesia tend to be.'
     };
   }
   return {
     label: 'Variable',
-    detail: 'Your colour choices varied a fair bit across the three rounds — the typical pattern for people who don’t experience letters or numbers as having an inherent colour.'
+    detailBefore:
+      'Your colour choices varied a fair bit across the three rounds — the typical pattern for people who don’t experience letters or numbers as having an inherent colour.',
+    detailBold: null,
+    detailAfter: ''
   };
 }

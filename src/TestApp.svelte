@@ -1,65 +1,44 @@
 <script>
-  // The Synaesthesia Battery Test — a standalone companion app to the
-  // story (separate entry point, see test.html/test-main.js/vite.config.js),
-  // sharing the story's own theme.js/global.css so it reads as the same
-  // visual identity without being a route inside App.svelte.
-  //
-  // Fixed to iPhone SE proportions (portrait or landscape — see the
-  // --phone-w/--phone-h media query below) with no further
-  // responsiveness; on a wider (desktop) viewport it sits inside a
-  // decorative phone-frame bezel on the story's own background instead
-  // of stretching to fill the page.
+  // Standalone battery-test app; shares the story's theme.js/global.css.
+  // Fixed to iPhone SE proportions; desktop gets a decorative phone bezel.
   import {
     buildTrialSequence,
     scoreConsistency,
     describeConsistency,
     REPEATS_PER_GRAPHEME
   } from './lib/data/graphemeTest.js';
+  import { supabase, supabaseConfigured } from './lib/supabase.js';
 
   let screen = $state('intro'); // 'intro' | 'instructions' | 'demo' | 'trial' | 'results'
   let name = $state('');
+  // No email/account — honour system instead, so there's nothing
+  // personally identifying to store (and no GDPR hassle). Repeating the
+  // test soon after a previous go mostly measures memory of your own
+  // past answers, not genuine colour association, so this just asks and
+  // warns rather than trying to technically enforce anything.
+  let hasTakenBefore = $state(null); // null (unanswered) | true | false
+  let saveState = $state('idle'); // 'idle' | 'saving' | 'saved' | 'error'
+  let aggregate = $state(null); // { count, avgScore } once fetched, for the results footnote
+  let shareState = $state('idle'); // 'idle' | 'copied' — only used by the clipboard fallback below
 
   let trialSequence = $state([]);
   let trialIndex = $state(0);
   /** @type {Record<string, string[]>} */
   let responsesByGrapheme = $state({});
 
-  // Bryony: "make sure we show progress, time or whatever other best
-  // practice... to incentivize people to finish — without overcrowding" —
-  // recorded once when the trials begin, then used to derive a live
-  // "~N min left" estimate from the subject's own actual pace so far
-  // (rather than a guessed constant), and to surface a one-off
-  // encouragement line at the quarter/half/three-quarter marks. Both
-  // fold into the single existing progress line rather than adding new
-  // UI elements.
+  // Trial start time, used to derive a live "~N min left" estimate.
   let testStartTime = $state(0);
 
-  // Bryony: "could we have one which shows the whole spectrum... I
-  // suspect we can't suggest hues" — a hue/saturation WHEEL (white
-  // centre, full colour at the rim, hue by angle) rather than the native
-  // <input type="color"> picker, whose own UI varies by OS/browser (the
-  // plain slider she got on macOS Safari isn't the same polished wheel
-  // iOS shows). Built by hand so it's one consistent, on-brand widget
-  // everywhere, and so the starting position is always dead centre —
-  // neutral, no colour suggested — every single trial.
+  // Hand-built hue/saturation wheel, not native <input type="color">,
+  // so it's consistent across browsers and starts neutral each trial.
   let hue = $state(0); // 0-360
   let sat = $state(0); // 0-1, distance from centre
   let wheelEl = $state();
   let draggingWheel = false;
 
-  // Bryony: "I'm not sure you can get a brown on the wheel?" — right:
-  // with brightness pinned at 1 the wheel could only reach TINTS (white
-  // blended with a hue), never the darker SHADES that browns, olives,
-  // navy, maroon etc. actually are. Fixed with no second control and no
-  // extra gesture: the same radius that used to carry only saturation
-  // now carries the whole white -> pure hue -> black journey. Inner
-  // half (t 0 - 0.5) is unchanged — white at centre fading into the
-  // pure hue at the half-radius ring; outer half (t 0.5 - 1) is new —
-  // that same pure hue darkening down to black at the rim. Still one
-  // white, neutral starting point; still one drag. The one colour
-  // family still out of reach is a true neutral grey short of black
-  // itself, since every point on this path short of the very rim still
-  // carries some of its hue.
+  // Bug fix: fixed brightness=1 meant no shades (browns, navy) were
+  // reachable. Radius now carries white -> hue -> black in one drag:
+  // inner half tints, outer half shades. True neutral grey still unreachable.
   function hueRadiusToHex(h, t) {
     let s, v;
     if (t <= 0.5) {
@@ -101,8 +80,7 @@
 
   let currentColor = $derived(hueRadiusToHex(hue, sat));
 
-  // Shared by the real wheel's thumb and the demo wheel's animated one
-  // below — same hue/radius -> on-screen-position maths either way.
+  // Shared by the real wheel's thumb and the demo wheel's animated one.
   function hueRadiusToXYPercent(h, t) {
     const rad = (h * Math.PI) / 180;
     return { x: Math.sin(rad) * t * 50, y: -Math.cos(rad) * t * 50 };
@@ -137,8 +115,7 @@
     draggingWheel = false;
   }
 
-  // Keyboard access to the wheel — left/right rotate hue, up/down move
-  // in/out (saturation), shift for bigger steps.
+  // Keyboard access: left/right rotate hue, up/down move saturation.
   function onWheelKeyDown(e) {
     const step = e.shiftKey ? 10 : 2;
     if (e.key === 'ArrowLeft') {
@@ -156,13 +133,7 @@
     }
   }
 
-  // Bryony: "a quick demo before you start... show the cursor moving,
-  // walk through what they do" — a scripted, non-interactive playback
-  // on its own screen between the instructions and the real trials: the
-  // wheel's own thumb animates itself out from the neutral centre to a
-  // worked example ("for me A is like a deep orangey yellow"), using
-  // the exact same hue/radius -> colour and -> position maths as a real
-  // drag, so what's demonstrated is genuinely how it behaves.
+  // Scripted demo: thumb animates from neutral centre to a worked example.
   const DEMO_LETTER = 'A';
   const DEMO_TARGET_HUE = 42; // an orangey yellow
   const DEMO_TARGET_RADIUS = 0.68; // "deep" — into the darkening outer half
@@ -175,7 +146,7 @@
     const start = performance.now();
     function tick(now) {
       const raw = Math.min(1, (now - start) / durationMs);
-      const eased = 1 - Math.pow(1 - raw, 3); // ease-out — settles in like a real drag
+      const eased = 1 - Math.pow(1 - raw, 3); // ease-out, settles like a real drag
       demoHue = DEMO_TARGET_HUE * eased;
       demoSat = DEMO_TARGET_RADIUS * eased;
       demoAnimFrame = raw < 1 ? requestAnimationFrame(tick) : null;
@@ -203,11 +174,7 @@
   const currentGrapheme = $derived(trialSequence[trialIndex]);
   const trialNumber = $derived(trialIndex + 1);
 
-  // Recomputed fresh each time trialIndex changes (that read is what
-  // makes this reactive) from the subject's OWN average pace so far —
-  // not a guessed constant — so it gets more accurate as the test goes
-  // on. Needs a couple of completed trials before it's stable enough to
-  // show; before that it's just null and the plain count shows instead.
+  // Recomputed from the subject's own average pace, more accurate over time.
   let remainingTimeLabel = $derived.by(() => {
     if (trialIndex < 3) return null;
     const elapsedMs = Date.now() - testStartTime;
@@ -220,9 +187,7 @@
     return `~${mins} min left`;
   });
 
-  // A one-off encouragement at the quarter marks, shown in place of the
-  // usual count for just that single trial — a nudge to keep going
-  // without adding any new UI of its own.
+  // One-off encouragement at quarter marks, replacing the usual count.
   let milestoneLabel = $derived.by(() => {
     const total = totalTrials();
     if (!total) return null;
@@ -238,7 +203,7 @@
   );
 
   function startInstructions() {
-    if (!name.trim()) return;
+    if (!name.trim() || hasTakenBefore === null) return;
     screen = 'instructions';
   }
 
@@ -254,28 +219,73 @@
   function nextTrial() {
     const grapheme = currentGrapheme;
     const existing = responsesByGrapheme[grapheme] || [];
-    // Bryony: name/scores/email get real storage later — for now this
-    // stays an in-memory object, but shaped exactly as that will need:
-    // one array of responses per grapheme, keyed by the grapheme itself.
+    // In-memory for now; shaped for real storage later (per grapheme).
     responsesByGrapheme = { ...responsesByGrapheme, [grapheme]: [...existing, currentColor] };
 
     if (trialIndex + 1 >= totalTrials()) {
       results = scoreConsistency(responsesByGrapheme);
       screen = 'results';
+      saveResults();
     } else {
       trialIndex += 1;
       resetWheel();
     }
   }
 
-  function restart() {
-    screen = 'intro';
-    trialSequence = [];
-    trialIndex = 0;
-    responsesByGrapheme = {};
-    results = null;
+  // Persists the finished attempt — fully anonymous, just a score and the
+  // per-grapheme colour picks, nothing identifying anyone.
+  async function saveResults() {
+    if (!supabaseConfigured) return;
+    saveState = 'saving';
+    const { error } = await supabase
+      .from('attempts')
+      .insert({ overall_score: results.overallScore, per_grapheme: results.perGrapheme });
+    saveState = error ? 'error' : 'saved';
+    if (!error) fetchAggregate();
+  }
+
+  // Anonymous aggregate across everyone's attempts (the attempts table has
+  // no email/name on it at all), just for a "you're one of N" footnote.
+  async function fetchAggregate() {
+    const { data, error } = await supabase.from('attempts').select('overall_score');
+    if (error || !data || !data.length) return;
+    const avgScore = data.reduce((sum, row) => sum + Number(row.overall_score), 0) / data.length;
+    aggregate = { count: data.length, avgScore };
+  }
+
+  // Native share sheet (iOS/Android/most mobile browsers) where it's
+  // available — which is the common case here, since this app is phone-
+  // shaped to begin with. Falls back to copying the same text + link, for
+  // desktop browsers that don't support navigator.share. Shares the band
+  // label only (e.g. "highly consistent"), never the score or the actual
+  // colour picks.
+  function shareResult(bandLabel) {
+    const text = `I just found out I'm a "${bandLabel.toLowerCase()}" letters + numbers → colour synaesthete (or not!) according to this quick colour test — curious what you'd get?`;
+    const url = `${window.location.origin}/test.html`;
+    if (navigator.share) {
+      navigator.share({ title: 'Synaesthesia Battery Test', text, url }).catch(() => {});
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(`${text} ${url}`);
+      shareState = 'copied';
+      setTimeout(() => {
+        shareState = 'idle';
+      }, 2500);
+    }
+  }
+
+  // Enter/Return finishes a trial the same as clicking Next/Finish —
+  // only once a colour's actually been chosen (sat === 0 means the wheel
+  // is still at its untouched neutral centre), matching the button's own
+  // disabled condition below. Global rather than on the wheel itself, so
+  // it works regardless of what has focus.
+  function handleTrialKeydown(e) {
+    if (screen !== 'trial' || e.key !== 'Enter' || sat === 0) return;
+    e.preventDefault();
+    nextTrial();
   }
 </script>
+
+<svelte:window onkeydown={handleTrialKeydown} />
 
 <div class="page">
   <div class="phoneScreen">
@@ -285,8 +295,9 @@
         <p class="body">
           Do letters and numbers make you see colours? This short test checks how
           consistent your own colour associations are — the same test researchers use
-          to study grapheme-colour synaesthesia.
+          to study <strong>letters + numbers → colour</strong> synaesthesia.
         </p>
+        <a class="storyLink" href="/">Read the story behind this test →</a>
         <label class="fieldLabel" for="nameInput">Your name</label>
         <input
           id="nameInput"
@@ -296,7 +307,40 @@
           placeholder="e.g. Bryony"
           onkeydown={(e) => e.key === 'Enter' && startInstructions()}
         />
-        <button class="primaryButton" disabled={!name.trim()} onclick={startInstructions}>
+        <span class="fieldLabel">Have you taken this test before?</span>
+        <div class="toggleGroup" role="radiogroup" aria-label="Have you taken this test before?">
+          <button
+            type="button"
+            class="toggleButton"
+            class:toggleButtonActive={hasTakenBefore === false}
+            aria-pressed={hasTakenBefore === false}
+            onclick={() => (hasTakenBefore = false)}
+          >
+            No, first time
+          </button>
+          <button
+            type="button"
+            class="toggleButton"
+            class:toggleButtonActive={hasTakenBefore === true}
+            aria-pressed={hasTakenBefore === true}
+            onclick={() => (hasTakenBefore = true)}
+          >
+            Yes, I have
+          </button>
+        </div>
+        {#if hasTakenBefore}
+          <p class="fieldHint">
+            This measures how <em>consistent</em> your colour choices are — if you
+            remember your old answers you'll likely just repeat them instead of
+            reacting freshly, which inflates the score. For a meaningful result,
+            leave at least <strong>6 months</strong> between attempts.
+          </p>
+        {/if}
+        <button
+          class="primaryButton"
+          disabled={!name.trim() || hasTakenBefore === null}
+          onclick={startInstructions}
+        >
           Continue
         </button>
       </div>
@@ -334,7 +378,26 @@
           </div>
         </div>
 
-        <button class="primaryButton" onclick={startTrials}>Got it — start</button>
+        <button class="primaryButton" onclick={() => (screen = 'confirmStart')}>
+          Got it — start
+        </button>
+      </div>
+    {:else if screen === 'confirmStart'}
+      <div class="screenContent">
+        <h2 class="subtitle">One thing before you start</h2>
+        <p class="body">
+          This takes at least 5 minutes — 108 rounds, start to finish, with no way
+          to pause partway through. Worth making sure you've got the time before
+          you dive in.
+        </p>
+        <button class="primaryButton" onclick={startTrials}>Yes, I'm ready</button>
+        <button
+          class="secondaryButton"
+          type="button"
+          onclick={() => (screen = 'instructions')}
+        >
+          Not yet
+        </button>
       </div>
     {:else if screen === 'trial'}
       <div class="screenContent trialScreen">
@@ -377,13 +440,16 @@
         <button class="primaryButton" disabled={sat === 0} onclick={nextTrial}>
           {trialIndex + 1 >= totalTrials() ? 'Finish' : 'Next'}
         </button>
+        <p class="keyHint">or press Return</p>
       </div>
     {:else if screen === 'results'}
       {@const band = describeConsistency(results.overallScore)}
       <div class="screenContent resultsScreen">
         <h2 class="subtitle">Nice work, {name}!</h2>
         <p class="scoreLabel">{band.label}</p>
-        <p class="body">{band.detail}</p>
+        <p class="body">
+          {band.detailBefore}{#if band.detailBold}<strong>{band.detailBold}</strong>{/if}{band.detailAfter}
+        </p>
 
         <div class="swatchGrid">
           {#each results.perGrapheme as row (row.grapheme)}
@@ -400,47 +466,56 @@
 
         <p class="footnote">
           This is a fun, informal version of the real test — not a diagnostic tool.
-          Results aren't saved anywhere yet.
         </p>
-        <button class="primaryButton" onclick={restart}>Try again</button>
+        {#if supabaseConfigured}
+          {#if saveState === 'saved' && aggregate}
+            <p class="footnote">
+              Saved — you're one of {aggregate.count} people who've taken this so far
+              (average score {aggregate.avgScore.toFixed(1)}).
+            </p>
+          {:else if saveState === 'saved'}
+            <p class="footnote">Saved — thanks for taking part.</p>
+          {:else if saveState === 'error'}
+            <p class="footnote">
+              Your result couldn't be saved (connection issue) — everything above is
+              still accurate for you.
+            </p>
+          {:else}
+            <p class="footnote">Saving your result…</p>
+          {/if}
+        {:else}
+          <p class="footnote">Results aren't saved anywhere yet.</p>
+        {/if}
+
+        <button class="secondaryButton" type="button" onclick={() => shareResult(band.label)}>
+          Share your result
+        </button>
+        {#if shareState === 'copied'}
+          <p class="fieldHint">Copied — paste it anywhere!</p>
+        {/if}
+
+        <a class="storyLink" href="/">Read the story behind this test →</a>
       </div>
     {/if}
   </div>
 </div>
 
 <style>
-  /* Bryony: "it needs to work on landscape as well — portrait if the
-     height is there, otherwise landscape." This used to switch on
-     `orientation: landscape` (pure width > height), which matches almost
-     any desktop browser window too — those are nearly always wider than
-     tall, even ones with plenty of vertical room to spare — so the
-     "landscape" shape kept firing on desktop when it shouldn't have.
-     Switching on available HEIGHT instead: the stacked (portrait) shape
-     is used whenever there's enough height to show it properly — a phone
-     held upright, a tablet in landscape, most desktop windows — and the
-     side-by-side (landscape) shape only kicks in once height is
-     genuinely scarce, around a real phone's rotated height or a desktop
-     window resized short. One rule, works the same everywhere. */
+  /* Bug fix: `orientation: landscape` (width>height) fired on nearly every
+     desktop window regardless of actual height. Switched to max-height so
+     portrait shows whenever height allows, landscape only when height is
+     genuinely scarce — same rule everywhere, per Bryony. */
   :root {
     --phone-w: 375px;
     --phone-h: 667px;
-    /* Bryony: "the wheel should take up much more of the space...
-       maximum space use please" — then "I want the wheel and letter to
-       be bigger": sized as a share of the actual viewport height rather
-       than a fixed guess, so it grows wherever more height is on offer
-       (a taller phone, a tablet held upright, a roomy desktop window)
-       while staying safely within range on a small phone. */
+    /* Wheel sized off viewport height so it grows with available space. */
     --wheelSize: clamp(220px, 34dvh, 340px);
   }
   @media (max-height: 520px) {
     :root {
       --phone-w: 667px;
       --phone-h: 375px;
-      /* Landscape keeps the wheel and letter side by side, so width is
-         ample here — height is the scarce resource by definition of
-         this breakpoint, so the wheel is sized against it directly:
-         bigger than before, still leaving room for the pinned-top
-         chrome and the button below. */
+      /* Width is ample in landscape; wheel sized directly off height instead. */
       --wheelSize: clamp(200px, 50dvh, 300px);
     }
   }
@@ -464,9 +539,7 @@
     background: var(--background);
   }
 
-  /* Desktop-only decoration — a real iPhone SE viewport never reaches
-     this width in either orientation, so this only ever fires when the
-     page is being viewed on something bigger than the phone itself. */
+  /* Desktop-only: a real iPhone SE viewport never reaches this width. */
   @media (min-width: 700px) {
     .page {
       padding: 48px;
@@ -528,6 +601,58 @@
     background: #fff;
     color: var(--text);
   }
+  .fieldHint {
+    font-family: var(--font-body);
+    font-size: var(--text-micro, 12px);
+    color: var(--grey);
+    margin: 2px 0 0;
+  }
+  .storyLink {
+    font-family: var(--font-body);
+    font-size: var(--text-caption, 14px);
+    color: var(--purple);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .secondaryButton {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    font-size: var(--text-body, 16px);
+    padding: 10px 20px;
+    border-radius: 999px;
+    border: none;
+    background: transparent;
+    color: var(--greyDark);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .keyHint {
+    font-family: var(--font-body);
+    font-size: var(--text-micro, 12px);
+    color: var(--grey);
+    text-align: center;
+    margin: -8px 0 0;
+  }
+  .toggleGroup {
+    display: flex;
+    gap: 8px;
+  }
+  .toggleButton {
+    flex: 1;
+    font-family: var(--font-body);
+    font-size: var(--text-caption, 14px);
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1.5px solid var(--grey);
+    background: #fff;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .toggleButtonActive {
+    border-color: var(--purple);
+    background: var(--purple);
+    color: #fff;
+  }
 
   .primaryButton {
     margin-top: auto;
@@ -552,12 +677,8 @@
     align-items: stretch;
   }
 
-  /* The progress bar (trial screen) and the drag hint (both screens) —
-     "instructions" Bryony wants at the top, out of the wheel's way. In
-     portrait `display: contents` makes this wrapper invisible to layout,
-     so its children just take their place at the top of the normal
-     flex column, in document order, same as if there were no wrapper.
-     The landscape override below is what actually changes behaviour. */
+  /* display: contents makes this wrapper invisible in portrait; the
+     landscape override below is what actually repositions it. */
   .screenChrome {
     display: contents;
   }
@@ -579,17 +700,9 @@
     margin: 0;
   }
 
-  /* Portrait: letter above, wheel below (Bryony: "portrait letter should
-     be above, wheel below, maximum space use please") — the DOM order is
-     always wheel-then-letter (unchanged, still what "keep it on the left"
-     means in landscape below), so column-reverse is what flips it
-     visually here without needing two different markups. Landscape
-     switches back to a row — wheel on the left, letter on the right —
-     per that earlier request. Either way both children share
-     --wheelSize as an explicit size (not a % or an aspect-ratio
-     auto-derivation flexbox could distort under crowding), so the wheel
-     can never end up non-circular and the letter's box is guaranteed
-     the same size as the wheel's, not just visually close to it. */
+  /* column-reverse flips DOM order (wheel-then-letter) visually in portrait;
+     landscape switches to a row. --wheelSize keeps both explicitly sized
+     so the wheel stays circular under crowding. */
   .trialRow {
     flex: 1;
     min-height: 0;
@@ -612,10 +725,7 @@
     font-size: calc(var(--wheelSize) * 0.72);
     line-height: 1;
     transition: color 0.1s ease;
-    /* A pale/near-white pick is a perfectly valid answer on this wheel,
-       but would otherwise vanish against the page's own warm-ivory
-       background — a soft shadow keeps the glyph readable at every
-       saturation without changing the colour it displays. */
+    /* Soft shadow keeps pale colours readable against the warm-ivory bg. */
     text-shadow:
       0 0 1px rgba(0, 0, 0, 0.25),
       0 2px 6px rgba(0, 0, 0, 0.12);
@@ -629,13 +739,8 @@
     touch-action: none;
     cursor: pointer;
     border: 1px solid var(--grey);
-    /* White at the centre, the pure hue at half-radius, black at the
-       rim — matching hueRadiusToHex() above exactly. Three flat layers:
-       a black overlay fades in from half-radius to solid black at the
-       edge (darkens the outer half only), a white overlay fades out
-       over the inner half (whitens it, leaves the outer half alone),
-       and the hue ring underneath is full-strength everywhere — the
-       two overlays are what carve white -> hue -> black out of it. */
+    /* Matches hueRadiusToHex(): white/black overlays carve the hue ring
+       into white -> hue -> black, inner/outer half respectively. */
     background:
       radial-gradient(circle at center, rgba(0, 0, 0, 0) 50%, #000 100%),
       radial-gradient(circle at center, #fff 0%, rgba(255, 255, 255, 0) 50%),
@@ -674,22 +779,12 @@
     font-style: italic;
   }
   .demoWheel {
-    /* Playback only, not a real control — no drag handlers, so it
-       shouldn't invite a click the way the real one does. */
+    /* Playback only, no drag handlers — shouldn't invite a click. */
     cursor: default;
   }
 
-  /* Bryony: "adjust the proportions like this" (reference screenshots:
-     wheel above the letter, progress chrome pinned to its own strip at
-     the top) — for a roomy, wide-enough screen (desktop/tablet, real
-     phone never reaches 700px wide in either orientation) show the
-     wheel-then-letter DOM order top-to-bottom as-is (`column`, not
-     portrait's own `column-reverse`, which is specifically for an
-     actual portrait phone's "letter above, wheel below"), with the same
-     pinned-top chrome strip the height-scarce breakpoint below also
-     uses. Phone size and wheel size aren't touched here — they already
-     come from the (now viewport-height-relative) :root values above, so
-     they grow on their own wherever there's more height to give. */
+  /* Desktop/tablet: wheel-then-letter top-to-bottom (`column`), chrome
+     pinned to its own top strip, per Bryony's reference screenshots. */
   @media (min-width: 700px) {
     .trialScreen,
     .demoScreen {
@@ -711,18 +806,8 @@
     }
   }
 
-  /* Bryony: "it needs to work on landscape as well — portrait if the
-     height is there, otherwise landscape." Placed AFTER the min-width
-     block above so it wins the cascade whenever height is actually
-     scarce, even on a wide/desktop-width window that's been resized
-     short — "otherwise landscape" applies regardless of width. Also
-     covers a real phone rotated: .screenChrome (the progress bar plus
-     the drag hint on the trial screen, or the heading plus quote on the
-     demo screen) comes out of the flex column entirely and sits as its
-     own thin strip pinned to the very top of the phone frame, so none
-     of it counts against the wheel/letter row's share of the available
-     height. .trialScreen and .demoScreen get matching extra top padding
-     so their own content starts below that strip instead of under it. */
+  /* Placed after min-width block so it wins the cascade whenever height
+     is scarce, regardless of width — covers a real phone rotated too. */
   @media (max-height: 520px) {
     .trialScreen,
     .demoScreen {
