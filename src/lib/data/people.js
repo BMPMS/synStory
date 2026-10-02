@@ -2,13 +2,13 @@
 // reused wherever the story needs this same group again. Photos are
 // pre-cropped to exact squares — see ChartSvg.
 import davidHockney from '../assets/people/david-hockney.png';
-import wassilyKandinsky from '../assets/people/wassily-kandinsky.jpg';
-import vladimirNabokov from '../assets/people/vladimir-nabokov.jpg';
-import richardFeynman from '../assets/people/richard-feynman.jpg';
+import wassilyKandinsky from '../assets/people/wassily-kandinsky.png';
+import vladimirNabokov from '../assets/people/vladimir-nabokov.png';
+import richardFeynman from '../assets/people/richard-feynman.png';
 import billieEilish from '../assets/people/billie-eilish.png';
 import ladyGaga from '../assets/people/lady-gaga.png';
-import pharrellWilliams from '../assets/people/pharrell-williams.jpg';
-import billyJoel from '../assets/people/billy-joel.jpg';
+import pharrellWilliams from '../assets/people/pharrell-williams.png';
+import billyJoel from '../assets/people/billy-joel.png';
 import lorde from '../assets/people/lorde.png';
 import geoffreyRush from '../assets/people/geoffrey-rush.png';
 import marilynMonroe from '../assets/people/marilyn-monroe.png';

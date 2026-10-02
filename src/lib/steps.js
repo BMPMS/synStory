@@ -286,14 +286,16 @@ export function layoutWeightedReveal(weights, range) {
 
 // Grid of tiles anchored bottom-left, wrapping upward, centred in a
 // reserved bottom band. Returns one {x, y} centre per index.
-export function cornerGridTargets({ count, tileSize, gap, width, height, edgeMargin }) {
+export function cornerGridTargets({ count, tileSize, gap, width, height, edgeMargin, bottomMargin = 0 }) {
   const perRow = Math.max(1, Math.floor((width - edgeMargin * 2 + gap) / (tileSize + gap)));
   const rows = Math.ceil(count / perRow);
   const blockHeight = rows * tileSize + (rows - 1) * gap;
 
-  // Bottom band tall enough for breathing room, any row count.
+  // Bottom band tall enough for breathing room, any row count. bottomMargin
+  // (Bryony: ~2/3 a tile's height, on mobile) lifts the whole band clear of
+  // the screen's bottom edge, since the band's own margin wasn't enough.
   const bottomBand = Math.max(tileSize + 40, 90);
-  const bandCenterY = height - bottomBand / 2;
+  const bandCenterY = height - bottomMargin - bottomBand / 2;
   const bottomRowY = bandCenterY + blockHeight / 2 - tileSize / 2;
 
   // Each row centred on its own width, so the block reads centred.

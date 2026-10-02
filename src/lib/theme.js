@@ -40,6 +40,19 @@ export const colors = {
 	purple: '#6A488C'
 };
 
+// Layout breakpoints — formalized 2026-10-02. The original Visual Guide
+// specified a single 800px mobile/desktop line, but ChartSvg.svelte had
+// drifted to a 600px mobile check everywhere, plus a de facto third tier
+// at 1000px already in use in two spots (cornerPadX, mobilePhotoScale)
+// that was never named. Promoted that into a proper mobile/tablet/desktop
+// system instead of leaving it as unlabelled magic numbers. Bryony
+// visually verified the tablet range (768px/1024px) before this was
+// formalized.
+export const breakpoints = {
+	mobile: 600,
+	tablet: 1000
+};
+
 export const fonts = {
 	heading: "'Fredoka', system-ui, sans-serif", // capitals & titles
 	body: "'Literata', Georgia, serif" // reading text

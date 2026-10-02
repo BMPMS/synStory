@@ -107,7 +107,7 @@
       { type: 'word', text: 'confirmed' },
       { type: 'phrase', text: 'letters + numbers → colour' },
       { type: 'word', text: 'synesthete,' },
-      { type: 'italic', text: 'still is.' }
+      { type: 'italic', text: '(still is.)' }
     ]
   ];
 
@@ -241,17 +241,21 @@
           </p>
         {/each}
 
-        <!-- Bryony: "What about you?" doorway to the battery test,
-             appended below the passage once it's essentially finished
-             revealing (step12.cta). -->
-        <div
-          class="whyICareCta"
-          style="opacity: {phase(whyICareProgress, step12.cta.fadeIn.start, step12.cta.fadeIn.end)}"
-        >
-          <p class="whyICareCtaTitle">What about you?</p>
-          <p class="whyICareCtaBody">Take the <strong>Synesthesia Battery Test</strong> and find out.</p>
-          <a class="whyICareCtaButton" href="/test.html">Start Test</a>
-        </div>
+      </div>
+
+      <!-- Bryony: "What about you?" doorway to the battery test — pinned
+           to the bottom of the pinned scene (not the end of the passage
+           above, which varies in height) so it always lands in the same
+           spot, with breathing room below it, right where the page
+           un-pins into Credits. Fades in once the passage above is
+           essentially finished revealing (step12.cta). -->
+      <div
+        class="whyICareCta"
+        style="opacity: {phase(whyICareProgress, step12.cta.fadeIn.start, step12.cta.fadeIn.end)}"
+      >
+        <p class="whyICareCtaTitle">What about you?</p>
+        <p class="whyICareCtaBody">Take the <strong>Synesthesia Battery Test</strong> and find out.</p>
+        <a class="whyICareCtaButton" href="/test.html">Start Test</a>
       </div>
     </main>
   </div>
@@ -404,14 +408,21 @@
     font-weight: 400;
   }
 
-  /* "What about you?" doorway — "return return" per Bryony: a clear
-     paragraph gap separating it from the passage above. */
+  /* "What about you?" doorway — anchored to the bottom of the pinned
+     scene (main fills .pinned's 100vh) with its own padding, rather than
+     flowing below the passage above, so it always lands in the same
+     place regardless of how tall the passage renders. */
   .whyICareCta {
-    margin-top: 48px;
+    position: absolute;
+    left: 50%;
+    bottom: 48px;
+    transform: translateX(-50%);
+    width: calc(100% - 48px);
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 12px;
+    text-align: center;
   }
   .whyICareCtaTitle {
     font-family: var(--font-heading);

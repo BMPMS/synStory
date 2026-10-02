@@ -64,8 +64,14 @@ img {
 /* Small, semi-opaque text blocks that scroll past the pinned chart, per
    Bryony's "introduce text steps for step 10 onwards" request. */
 .stepText {
+  /* Bryony: without this, `width`/`max-width` only ever sized the
+     content box — the 22px side padding was added on top, which is
+     exactly how the "centred" fix above still overflowed the viewport
+     by 2x that padding. border-box makes width/max-width include the
+     padding, matching what they look like they mean. */
+  box-sizing: border-box;
   max-width: 420px;
-  margin: 0 24px;
+  margin: 0 12px;
   padding: 16px 22px;
   background: rgba(255, 255, 255, 0.7);
   border-radius: 12px;
@@ -91,7 +97,19 @@ img {
 .step--captions-3 .stepText,
 .step--captions-4 .stepText {
   position: absolute;
+  /* Bryony: pinning left+right stretched the box to fill the full width
+     on every screen size, which left it LEFT-aligned (not centred) the
+     moment max-width:420px clamped it below that stretch width, i.e. on
+     anything wider than a phone. `left: 50%` + no width also doesn't
+     work on its own — it shrink-to-fits against (container width - left
+     offset), here half the viewport, capping it far narrower than
+     intended. The fix: an explicit viewport-based width (not a
+     percentage of the ambiguous containing block) plus transform
+     centring, which centres correctly regardless of whether max-width
+     ends up winning. */
   left: 50%;
+  width: calc(100vw - 24px);
+  margin: 0;
   transform: translate(-50%, -50%);
 }
 
@@ -158,14 +176,15 @@ img {
    in App.svelte) — for the LAST step that needs room to scroll past
    its own bottom, and with nothing after it, the page simply runs out
    of scroll first and progress gets stuck short of 1, cutting the
-   reveal off mid-way. This is never itself visible (the pinned scene
-   has already unstuck by the time you'd reach it) — it exists purely
-   to give scroll-tracking room to finish. "Why do I care?" is now a
-   genuine step itself (step 12, see App.svelte), so this buffer's job
-   is unchanged from before — it's just giving ITS progress room to
-   reach 1 instead of the old last step's. */
+   reveal off mid-way. .pinned stays sticky for this buffer's full
+   height too (it's still inside .scroll-track), so it was previously
+   sized at a lazy 100vh — Bryony: that left a long dead scroll after
+   the "Start Test" button was already fully visible before Credits
+   appeared. Shrunk to just past the ~10vh (1 - offset) scrollama
+   actually needs to land progress on 1, plus a little room for the
+   button's own height. */
 .scroll-buffer {
-  height: 100vh;
+  height: 15vh;
 }
 
 main {

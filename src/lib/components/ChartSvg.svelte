@@ -20,7 +20,7 @@
     windPhase,
     layoutQuoteReveals
   } from '../steps.js';
-  import { colors, spacing, typeScale } from '../theme.js'; // theme's --text-caption/--text-lead CSS vars carry the type scale
+  import { colors, spacing, typeScale, breakpoints } from '../theme.js'; // theme's --text-caption/--text-lead CSS vars carry the type scale
   import { senseIcons } from '../data/senseIcons.js';
   import { quotes } from '../data/quotes.js';
   import { personIcon } from '../data/personIcon.js'; // placeholder icon, real art later
@@ -378,17 +378,22 @@
     // Step7 x-ticks: a FIXED array (data-joined once) — must never need
     // to shrink, since a join's exit branch would remove elements.
     // Bryony: min/max year as the first/last ticks, plus round decades
-    // in between, 20 years apart.
-    const publicationsXTickValues = [publicationsMinYear];
-    const firstRoundXTick = Math.ceil(publicationsMinYear / 10) * 10;
-    // Bryony: drop a round tick within 10 years of either endpoint.
-    const xTickEdgeGuard = 10;
-    for (let year = firstRoundXTick; year < publicationsMaxYear; year += 20) {
-      if (year - publicationsMinYear > xTickEdgeGuard && publicationsMaxYear - year > xTickEdgeGuard) {
-        publicationsXTickValues.push(year);
+    // in between — 20 years apart normally, widened to 40 on a mobile-width
+    // chart, where 20-year spacing crowded the labels into each other.
+    function computeXTickValues(w) {
+      const values = [publicationsMinYear];
+      const firstRoundXTick = Math.ceil(publicationsMinYear / 10) * 10;
+      // Bryony: drop a round tick within 10 years of either endpoint.
+      const xTickEdgeGuard = 10;
+      const step = w < 600 ? 40 : 20;
+      for (let year = firstRoundXTick; year < publicationsMaxYear; year += step) {
+        if (year - publicationsMinYear > xTickEdgeGuard && publicationsMaxYear - year > xTickEdgeGuard) {
+          values.push(year);
+        }
       }
+      values.push(publicationsMaxYear);
+      return values;
     }
-    publicationsXTickValues.push(publicationsMaxYear);
 
     // Bryony: 1892 "De la synesthésie" marker, x from the fixed year alone.
     const publicationsMarkerYear = 1892;
@@ -467,6 +472,14 @@
     let heatmapSeparatorLines; // step11's 26 slice separators
     const heatmapArc = d3.arc(); // shared arc generator for ring cells
     let magnetTrayLetterFontSize = 16; // tray letter size, read by layoutHeatmap()
+    // Step10's full available band (before the tray's own aspect ratio
+    // shrinks it) — layoutHeatmap() sizes the ring off this directly, per
+    // Bryony, so the ring uses real horizontal space instead of being
+    // capped by the tray's own (much shorter) rectangle.
+    let connectionsBandTop = 0;
+    let connectionsBandBottom = 0;
+    let connectionsBandWidth = 0;
+    let connectionsBandCenterX = 0;
     let heatmapRanksSeeded = false; // seedHeatmapRanks() runs once only
     let currentHeatmapProgress = 0; // last t, reapplied by layoutHeatmap() on resize
     const heatmapColorInterpCache = {}; // cached colour interpolators, keyed by colour pair
@@ -857,7 +870,7 @@
       const xTicks = svg
         .select('.pubXAxisGroup')
         .selectAll('.pubXTick')
-        .data(publicationsXTickValues, (d) => d)
+        .data(computeXTickValues(width), (d) => d)
         .join((enter) => {
           // Bryony: no tick marks, just the year text.
           const g = enter.append('g').attr('class', 'pubXTick');
@@ -876,9 +889,14 @@
         .data(publicationsYTickValues, (d) => d)
         .join((enter) => enter.append('text').attr('class', 'pubYTick').text((d) => d));
 
+      // Bryony: the Rouw & Scholte / Witthoft citation labels crowded a
+      // mobile-width chart — keep their dashed reference lines, drop the
+      // rotated label text there. The 1892 "De la synesthésie" marker
+      // label stays on every screen size, per Bryony.
+      const showCitationLabels = width >= 600;
       svg.select('.pubMarkerLabel').text(publicationsMarkerLabel);
-      svg.select('.pubCitation1 .pubCitationLabel').text(publicationsCitations[0].label);
-      svg.select('.pubCitation2 .pubCitationLabel').text(publicationsCitations[1].label);
+      svg.select('.pubCitation1 .pubCitationLabel').text(showCitationLabels ? publicationsCitations[0].label : '');
+      svg.select('.pubCitation2 .pubCitationLabel').text(showCitationLabels ? publicationsCitations[1].label : '');
 
       return { xTicks, yTicks };
     }
@@ -1017,7 +1035,7 @@
       // label offset should too.
       senseGroups.select('.senseIconLabel').attr('y', iconSize / 2 + labelOffset);
       // Bryony: labels 0.9x on mobile.
-      const senseLabelFontSize = typeScale.lead * (width < 600 ? 0.9 : 1);
+      const senseLabelFontSize = typeScale.lead * (width < breakpoints.mobile ? 0.9 : 1);
       senseGroups.select('.senseIconLabel').style('font-size', `${senseLabelFontSize}px`);
 
       // Real row extent, so layoutClosing() mirrors the gap above exactly.
@@ -1256,7 +1274,6 @@
         return { tspanNodes, widths, lines, spaceWidth, lineHeight, blockHeight: (lines.length - 1) * lineHeight + fontSize };
       }
 
-      // Steps the shared font size down until every quote fits.
       let fontSize = maxFontSize;
       let wrapped = [];
       quotesGroups.attr('font-size', fontSize);
@@ -1268,7 +1285,6 @@
         quotesGroups.attr('font-size', fontSize);
       }
 
-      // Positions each quote's words: centred per line, block centred vertically.
       wrapped.forEach(({ tspanNodes, widths, lines, spaceWidth, lineHeight }) => {
         const blockTop = centerY - ((lines.length - 1) * lineHeight) / 2;
         lines.forEach((line, li) => {
@@ -1310,6 +1326,20 @@
         .attr('y', topPadding + labelFontSize / 2);
       wrap(labelEl, labelWrapWidth, labelFontSize);
       const labelBox = labelEl.node().getBBox();
+
+      // Bryony: mobile-only hint, closing stage only — the photos become
+      // clickable right as this header appears, so point that out.
+      const hintFontSize = Math.max(11, labelFontSize * 0.6);
+      if (sightHeaderStage === 'closing' && width < breakpoints.mobile) {
+        svg
+          .select('.sightSubHint')
+          .text('(click photos for info)')
+          .attr('font-size', hintFontSize)
+          .attr('x', width / 2)
+          .attr('y', labelBox.y + labelBox.height + spacing.sm);
+      } else {
+        svg.select('.sightSubHint').text('');
+      }
 
       // Composition must fit the band between the caption and the tile cluster.
       const topBound = Math.max(senseRestY, labelBox.y + labelBox.height + spacing['2xl']);
@@ -1356,13 +1386,17 @@
       const cornerPad = spacing['6xl'];
       // Bryony: left/right padding shrinks on narrower screens (down to
       // half on mobile) to free up horizontal room; top/bottom untouched.
-      const cornerPadX = width < 600 ? cornerPad * 0.5 : width < 1000 ? cornerPad * 0.75 : cornerPad;
+      const cornerPadX = width < breakpoints.mobile ? cornerPad * 0.5 : width < breakpoints.tablet ? cornerPad * 0.75 : cornerPad;
       const left = edgeMargin + cornerPadX + iconSize / 2;
       const right = width - edgeMargin - cornerPadX - iconSize / 2;
       // Bryony: taste/sound (the 2 top corners) raised by one circle
       // radius, to leave room for bigger mobile photo fans below them.
       const top = topBound + cornerPad + iconSize / 2 - iconBgRadius;
-      const bottom = bottomBound - cornerPad - iconSize / 2;
+      // Bryony: touch/smell (the 2 bottom corners) nudged lower on mobile
+      // so they fill the band more evenly instead of leaving a gap below
+      // them that the top pair's own raise doesn't have to balance.
+      const bottomPad = cornerPad * (width < breakpoints.mobile ? 0.6 : 1);
+      const bottom = bottomBound - bottomPad - iconSize / 2;
       const corners = [
         { x: left, y: top }, // above-left
         { x: right, y: top }, // above-right
@@ -1383,9 +1417,12 @@
       });
 
       // Bryony: nudge both sub-icon pairs up ~15px, spread math untouched.
+      // objects gets an extra lift of its own — on mobile its label sat
+      // right on top of the letters+numbers/colour row below it.
       const pairLift = 15;
+      const objectsLift = 12;
       const targets = {
-        objects: { x: sightCenterX, y: sightCenterY - objectsOffset },
+        objects: { x: sightCenterX, y: sightCenterY - objectsOffset - objectsLift },
         lettersNumbers: { x: sightCenterX - pairGap / 2, y: sightCenterY + pairOffsetY - pairLift },
         colors: { x: sightCenterX + pairGap / 2, y: sightCenterY + pairOffsetY - pairLift }
       };
@@ -1411,7 +1448,22 @@
         // hard since dominant-baseline:hanging already adds clearance.
         const subIconLabelPad = 2;
         const iconCircleClearance = iconBgRadius + subIconLabelPad;
-        sightSubIconGroups.select('.sightSubIconLabel').attr('y', iconCircleClearance);
+        // Bryony: "letters + numbers" crowded into "colour" beside it on
+        // narrow screens — wrap it onto 2 lines whenever the gap between
+        // those two circles is too tight for it to sit on one line; the
+        // other labels have the open sides of the circle to spill into,
+        // so they're left as a fixed max width they'll never hit.
+        const pairLabelMaxWidth = Math.max(40, pairGap - circleGap);
+        const labelMaxWidth = { lettersNumbers: pairLabelMaxWidth };
+        sightSubIconGroups.each(function (d) {
+          const labelSel = d3
+            .select(this)
+            .select('.sightSubIconLabel')
+            .attr('x', 0)
+            .attr('y', iconCircleClearance)
+            .text(d.label);
+          wrap(labelSel, labelMaxWidth[d.key] || 400, 15);
+        });
       }
       // Same bg-circle radius on all 4 corner senses, per Bryony.
       if (senseGroups) senseGroups.select('.senseIconBg').attr('r', iconBgRadius);
@@ -1428,7 +1480,7 @@
       // (60%/70%/100%), independent of tileSizeFor's own breakpoints.
       // Mobile tier raised 1.5x (was 0.4), paired with taste/sound's
       // circles moving up above to make room.
-      const mobilePhotoScale = width < 600 ? 0.6 : width < 1000 ? 0.7 : 1;
+      const mobilePhotoScale = width < breakpoints.mobile ? 0.6 : width < breakpoints.tablet ? 0.7 : 1;
       const photoSize = TILE * step1.tilesToCorner.scale * mobilePhotoScale;
       const photoCorner = photoSize * 0.167; // same corner-radius ratio buildScene()'s tiles use (CORNER = TILE * 0.167)
       const pull = iconBgRadius + spacing.xs;
@@ -1732,9 +1784,15 @@
       const titleBox = titleEl.node().getBBox();
 
       // Bryony: more padding around the chart; y-axis moved right, freeing the left.
-      const chartTop = titleBox.y + titleBox.height + spacing['4xl'];
-      // Bryony: more bottom space so the footnote doesn't crowd the ticks.
-      const chartBottom = height - edgeMargin - (spacing['4xl'] + spacing['2xl']);
+      const isMobilePub = width < breakpoints.mobile;
+      // Bryony: "100px more space between the end of the header and the
+      // top of the line chart" on mobile.
+      const chartTop = titleBox.y + titleBox.height + spacing['4xl'] + (isMobilePub ? 100 : 0);
+      // Bryony: more bottom space so the footnote doesn't crowd the ticks —
+      // mobile needs 2.5x that, since the footnote wraps to 2 lines there.
+      // Bryony: 2.5x was too much once she saw it — dialled back to 2/3 of that.
+      const bottomReserve = (spacing['4xl'] + spacing['2xl']) * (isMobilePub ? 2.5 * (2 / 3) : 1);
+      const chartBottom = height - edgeMargin - bottomReserve;
       const chartLeft = edgeMargin + spacing['2xl'];
       const chartRight = width - edgeMargin - spacing['5xl']; // smaller right margin, per your note
 
@@ -1742,7 +1800,11 @@
       pubYScale = d3.scaleLinear().domain(publicationsYDomain).range([chartBottom, chartTop]);
       pubChartWidth = chartRight - chartLeft;
 
-      // x axis: baseline + one tick per publicationsXTickValues entry (fixed array).
+      // Bryony: ticks + y-axis label were a fixed 24px regardless of screen
+      // — fine on desktop, way too big for a mobile-width chart.
+      const tickFontSize = Math.max(11, Math.min(24, width * 0.04));
+
+      // x axis: baseline + one tick per computeXTickValues() entry.
       svg
         .select('.pubXAxisLine')
         .attr('x1', chartLeft)
@@ -1753,7 +1815,7 @@
       if (pubXTickGroups) {
         pubXTickGroups.attr('transform', (d) => `translate(${pubXScale(d)},${chartBottom})`);
         // Bryony: no tick marks, label closer to the axis line.
-        pubXTickGroups.select('.pubXTickLabel').attr('y', spacing.sm);
+        pubXTickGroups.select('.pubXTickLabel').attr('y', spacing.sm).style('font-size', `${tickFontSize}px`);
       }
 
       // Bryony: add a y-axis baseline, same style as the x-axis.
@@ -1766,12 +1828,34 @@
 
       // Bryony: y-axis moved to the right; label sits left of the ticks.
       if (pubYTickGroups) {
-        pubYTickGroups.attr('x', chartRight + spacing.md).attr('y', (d) => pubYScale(d)); // closer to the axis, per your note
+        pubYTickGroups
+          .attr('x', chartRight + spacing.md)
+          .attr('y', (d) => pubYScale(d))
+          .style('font-size', `${tickFontSize}px`); // closer to the axis, per your note
       }
-      // Label rotated 180° to read correctly now the axis moved sides.
-      const yLabelX = chartRight + spacing.md - 10; // a bit further left, per your note
-      const yLabelY = chartTop;
-      svg.select('.pubYAxisLabel').attr('transform', `translate(${yLabelX},${yLabelY}) rotate(90)`);
+      if (isMobilePub) {
+        // Bryony: rotated alongside the axis didn't fit mobile — laid flat
+        // above the axis line instead, smaller, centred over it.
+        const yLabelFontSize = Math.max(9, tickFontSize * 0.7);
+        svg
+          .select('.pubYAxisLabel')
+          .attr('transform', null)
+          .attr('x', chartRight)
+          .attr('y', chartTop - spacing.sm)
+          .style('font-size', `${yLabelFontSize}px`)
+          .style('text-anchor', 'middle')
+          .style('dominant-baseline', 'auto');
+      } else {
+        // Label rotated 180° to read correctly now the axis moved sides.
+        const yLabelX = chartRight + spacing.md - 10; // a bit further left, per your note
+        const yLabelY = chartTop;
+        svg
+          .select('.pubYAxisLabel')
+          .attr('transform', `translate(${yLabelX},${yLabelY}) rotate(90)`)
+          .style('font-size', `${tickFontSize}px`)
+          .style('text-anchor', null)
+          .style('dominant-baseline', null);
+      }
 
       // Bryony: 1892 marker line + labels rotated/aligned to mirror the y-axis label.
       const markerLabelGap = spacing.md;
@@ -1804,8 +1888,18 @@
         .select('.pubCitation2 .pubCitationLabel')
         .attr('transform', `translate(${citation2X - markerLabelGap},${chartTop - spacing.md}) rotate(-90)`);
 
-      // Bryony: small footnote, bottom-left, below the x-axis ticks.
-      svg.select('.pubFootnote').attr('x', chartLeft).attr('y', height - edgeMargin - 12); // moved up, per your note
+      // Bryony: small footnote, bottom-left, below the x-axis ticks —
+      // wraps onto its own 2nd line on mobile, where it's too long to fit.
+      // Bryony: on mobile, tethered to the chart's own bottom axis instead
+      // of the viewport edge, so it reads as part of the chart rather than
+      // floating in the (now smaller) reserved space below it.
+      const footnoteY = isMobilePub ? chartBottom + tickFontSize + spacing['2xl'] + spacing.lg : height - edgeMargin - 12; // down another line, per your note
+      svg.select('.pubFootnote').attr('x', chartLeft).attr('y', footnoteY);
+      const footnoteFontSize = 15;
+      svg
+        .select('.pubFootnoteLink')
+        .attr('x', isMobilePub ? chartLeft : null)
+        .attr('dy', isMobilePub ? footnoteFontSize * 1.3 : null);
 
       // Full stable line/area path; only the clip rect's width animates.
       // Bryony: curveCardinal for both.
@@ -1852,20 +1946,37 @@
       wrap(subtitleEl, subtitleWrapWidth, subtitleFontSize);
       const subtitleBox = subtitleEl.node().getBBox();
 
-      const iconTop = subtitleBox.y + subtitleBox.height + spacing['4xl'];
+      const headerHeight = subtitleBox.y + subtitleBox.height;
+      const iconTop = headerHeight + spacing['4xl'];
       const iconBottom = height - edgeMargin - spacing['2xl'];
-      const iconMaxWidth = width - (edgeMargin + spacing['4xl']) * 2;
+      // Bryony: same as the step10 tray — mobile side margin shrunk to
+      // 25% of what it was, so the left/right brain panels can use
+      // almost the full screen width.
+      const isMobileBrain = width < breakpoints.mobile;
+      const brainSideMargin = (edgeMargin + spacing['4xl']) * (isMobileBrain ? 0.25 : 1);
+      const iconMaxWidth = width - brainSideMargin * 2;
       const iconMaxHeight = iconBottom - iconTop;
       const iconScale = Math.max(0.05, Math.min(iconMaxWidth, iconMaxHeight) / 640);
       const iconX = width / 2 - (640 * iconScale) / 2;
-      const brainTransform = `translate(${iconX},${iconTop}) scale(${iconScale})`;
+      // Bryony: headerHeight + (100vh - headerHeight) / 2 still read as
+      // top-heavy — the header text itself sits above that gap, so the
+      // whole top region (header + gap) ends up bigger than the bottom
+      // gap even though the two gaps either side of the header are equal.
+      // True screen-centre (vh / 2) is what actually balances it, clamped
+      // so it never climbs under the header or runs past iconBottom.
+      const targetCenterY = height / 2;
+      const iconY = Math.min(
+        iconBottom - 640 * iconScale,
+        Math.max(iconTop, targetCenterY - (640 * iconScale) / 2)
+      );
+      const brainTransform = `translate(${iconX},${iconY}) scale(${iconScale})`;
       // Bryony: bg rects share the icon's transform, so nothing drifts apart.
       svg.select('.brainBgGroup').attr('transform', brainTransform);
       svg.select('.brainIconGroup').attr('transform', brainTransform);
 
       // Converts a local 0-640 point to a real screen coordinate.
       const toScreenX = (lx) => iconX + lx * iconScale;
-      const toScreenY = (ly) => iconTop + ly * iconScale;
+      const toScreenY = (ly) => iconY + ly * iconScale;
 
       // Bryony: "letters + numbers -> colour"/"controls" bold, to match
       // the Step 10 caption — sized down from the subtitle so the bold
@@ -2006,7 +2117,7 @@
           const lineStart = annotationAttachPoint[annotation.main + annotation.sub];
           const dotLocal = dotLocalPoint(d);
           const localStartX = Math.max(0, Math.min(640, (lineStart.x - iconX) / iconScale));
-          const localStartY = Math.max(0, Math.min(640, (lineStart.y - iconTop) / iconScale));
+          const localStartY = Math.max(0, Math.min(640, (lineStart.y - iconY) / iconScale));
           line
             .attr('x1', localStartX)
             .attr('y1', localStartY)
@@ -2050,7 +2161,7 @@
       const effectBarScreenBottom = effectCaptionTop - 8;
       const effectBarScreenTop = effectBarScreenBottom - effectBarHeight * iconScale;
       // Back to local space; the bar still lives in the scaled group.
-      const effectBarY = (effectBarScreenTop - iconTop) / iconScale;
+      const effectBarY = (effectBarScreenTop - iconY) / iconScale;
       svg
         .select('.brainEffectBar')
         .attr('x', legendPad)
@@ -2093,7 +2204,7 @@
       const volumeCenterX = 640 - legendPad - volumeLargeR;
       const volumeCircleTopScreenY = effectValueScreenY;
       const volumeCircleBottomScreenY = volumeCircleTopScreenY + volumeLargeR * 2 * iconScale;
-      const volumeBaselineY = (volumeCircleBottomScreenY - iconTop) / iconScale; // back to local space
+      const volumeBaselineY = (volumeCircleBottomScreenY - iconY) / iconScale; // back to local space
 
       svg
         .select('.brainVolumeCircleLarge')
@@ -2173,10 +2284,24 @@
       const subtitleBox = subtitleEl.node().getBBox();
 
       // Step10: drawn magnet tray (rounded rect + dividers), 26 letters.
-      const trayTop = subtitleBox.y + subtitleBox.height + spacing['4xl'];
+      const headerHeight = subtitleBox.y + subtitleBox.height;
+      const trayTop = headerHeight + spacing['4xl'];
       const trayBottom = height - edgeMargin - spacing['2xl'];
-      const trayMaxWidth = width - (edgeMargin + spacing['4xl']) * 2;
+      // Bryony: mobile side margin shrunk to 25% of what it was, so the
+      // tray (and the ring, which shares this same band width) can use
+      // almost the full screen width — the letters, sized off the tray's
+      // inner width, grow along with it.
+      const isMobileConnections = width < breakpoints.mobile;
+      const connectionsSideMargin = (edgeMargin + spacing['4xl']) * (isMobileConnections ? 0.25 : 1);
+      const trayMaxWidth = width - connectionsSideMargin * 2;
       const trayMaxHeight = trayBottom - trayTop;
+      // Bryony: shared with layoutHeatmap() — the ring sizes itself off
+      // this full band, not the (aspect-constrained, often much shorter)
+      // tray rectangle below.
+      connectionsBandTop = trayTop;
+      connectionsBandBottom = trayBottom;
+      connectionsBandWidth = trayMaxWidth;
+      connectionsBandCenterX = width / 2;
       // Tray aspect ratio, tuned per Bryony's feedback. Letters sized off
       // trayMaxWidth so this constant reshapes tray, not letter size.
       const trayAspect = 1.8;
@@ -2187,7 +2312,15 @@
         trayWidth = trayHeight * trayAspect;
       }
       const trayX = width / 2 - trayWidth / 2;
-      const trayY = trayTop;
+      // Bryony: same fix as the brain icon — true screen-centre (vh / 2),
+      // not just centred within the band below the header, which read as
+      // top-heavy. Clamped so it never climbs under the header or runs
+      // past the bottom of its band.
+      const trayTargetCenterY = height / 2;
+      const trayY = Math.min(
+        trayBottom - trayHeight,
+        Math.max(trayTop, trayTargetCenterY - trayHeight / 2)
+      );
       // Split X/Y padding so vertical pad can be tightened separately.
       const trayPadX = trayWidth * 0.035;
       // Top pad cut back per Bryony's "less space at the top".
@@ -2411,23 +2544,32 @@
     function layoutHeatmap() {
       if (!heatmapCellGroups || !magnetLetterGroups) return;
 
-      // Reuses the tray band layoutConnections() already positioned.
-      const trayEl = svg.select('.magnetTray');
-      const areaX = parseFloat(trayEl.attr('x'));
-      const areaY = parseFloat(trayEl.attr('y'));
-      const areaWidth = parseFloat(trayEl.attr('width'));
-      const areaHeight = parseFloat(trayEl.attr('height'));
-
       // --- Ring layout (colorOrder false/true beats) ---
-      const ringCx = areaX + areaWidth / 2;
-      const ringCy = areaY + areaHeight / 2;
-      const ringOuterRadius = Math.min(areaWidth, areaHeight) / 2;
+      // Bryony: sized off the full step10 band layoutConnections() set
+      // aside (connectionsBand*), not the tray rectangle itself — the
+      // tray's own aspect ratio made it much shorter than the band, which
+      // left the ring tiny with unused horizontal room either side of it.
+      // Bryony: margin only needs to clear the letter glyphs themselves
+      // now, not a flat guess — so the ring can grow as big as the band
+      // allows with just a sliver of padding either side.
+      const ringBandHeight = connectionsBandBottom - connectionsBandTop;
+      const ringLetterFontSize = Math.max(10, Math.min(16, magnetTrayLetterFontSize * 0.55));
+      const ringScale = ringLetterFontSize / magnetTrayLetterFontSize;
+      const ringLabelMargin = ringLetterFontSize * 0.4 + 2; // a bit tighter again, per Bryony — slightly bigger ring
+      const ringCx = connectionsBandCenterX;
+      const ringOuterRadius = Math.max(20, Math.min(connectionsBandWidth, ringBandHeight) / 2 - ringLabelMargin);
+      // Bryony: same fix as the brain icon/tray — true screen-centre
+      // (vh / 2), clamped so the ring never climbs under the header or
+      // runs past the bottom of its band.
+      const ringTargetCenterY = height / 2;
+      const ringCy = Math.min(
+        connectionsBandBottom - ringOuterRadius,
+        Math.max(connectionsBandTop + ringOuterRadius, ringTargetCenterY)
+      );
       const ringInnerRadius = ringOuterRadius * 0.32;
       const cellBandOuterRadius = ringOuterRadius * 0.86; // leaves room for the letter labels just outside it
       const ringLetterRadius = ringOuterRadius * 0.97;
       heatmapCellBandOuterRadius = cellBandOuterRadius;
-      const ringLetterFontSize = Math.max(10, Math.min(16, magnetTrayLetterFontSize * 0.55));
-      const ringScale = ringLetterFontSize / magnetTrayLetterFontSize;
 
       // Every ring child (cells/separators/morph pieces) draws in LOCAL
       // coordinates, origin at the ring's own centre — one group
@@ -2766,7 +2908,22 @@
           .attr('x', width / 2)
           .attr('y', topPadding + sightLabelFontSize / 2);
         wrap(labelEl, sightLabelWrapWidth, sightLabelFontSize);
+
+        // Bryony: mobile-only hint — the photos become clickable right as
+        // this header appears, so point that out.
+        if (sightHeaderStage === 'closing' && width < breakpoints.mobile) {
+          const labelBox = labelEl.node().getBBox();
+          svg
+            .select('.sightSubHint')
+            .text('(click photos for info)')
+            .attr('font-size', Math.max(11, sightLabelFontSize * 0.6))
+            .attr('x', width / 2)
+            .attr('y', labelBox.y + labelBox.height + spacing.sm);
+        } else {
+          svg.select('.sightSubHint').text('');
+        }
       }
+      svg.select('.sightSubHint').style('opacity', sightHeaderStage === 'closing' && width < breakpoints.mobile ? revealT : 0);
 
       // Same revealT shrinks the linked person's own tile (positionNodes()).
       linksRevealT = revealT;
@@ -3039,7 +3196,10 @@
         gap: cornerGap,
         width,
         height,
-        edgeMargin
+        edgeMargin,
+        // Bryony: the tiles sat right on the screen's bottom edge on
+        // mobile — lift the whole cluster clear by ~2/3 of a tile.
+        bottomMargin: TILE * step1.tilesToCorner.scale * 0.67
       });
 
       // layoutHeader sets topMargin, needed by seedPositions/clampToBounds.
@@ -3247,6 +3407,7 @@
       <circle class="sightCircle"></circle>
       <g class="sightSubIconsGroup"></g>
       <text class="sightLabel"></text>
+      <text class="sightSubHint"></text>
       <g class="linksGroup"></g>
       <g class="linkPhotosGroup"></g>
     </g>
@@ -3280,7 +3441,9 @@
       </g>
       <!-- AI generated publications link -->
       <text class="pubFootnote"
-        >Data source: PubMed <a href="/chatGPTPublications.csv" download="chatGPTPublications.csv"
+        ><tspan class="pubFootnoteText">Data source: PubMed</tspan
+        ><tspan> </tspan
+        ><a href="/chatGPTPublications.csv" download="chatGPTPublications.csv"
           ><tspan class="pubFootnoteLink">(pre-1942 AI researched + cross checked)</tspan></a
         ></text
       >
@@ -3550,6 +3713,15 @@
     fill: var(--text);
     text-anchor: middle;
     dominant-baseline: central;
+    opacity: 0;
+  }
+  :global(.chart-svg .sightSubHint) {
+    /* Mobile-only nudge toward the closing header, per Bryony. */
+    font-family: var(--font-body);
+    font-style: italic;
+    fill: var(--grey);
+    text-anchor: middle;
+    dominant-baseline: hanging;
     opacity: 0;
   }
   :global(.chart-svg .linksGroup) {
