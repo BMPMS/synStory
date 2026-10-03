@@ -95,13 +95,14 @@
       .attr('x', (d) => colX.get(d) + cw / 2)
       .attr('y', margin.top - 12)
       .attr('text-anchor', 'middle')
-      .attr('font-family', 'var(--font-heading)')
-      .attr('font-weight', 600)
-      .attr('font-size', 13)
-      .attr('fill', colors.text)
+      .attr('font-family', 'var(--font-body)')
+      .attr('font-size', 15)
+      .attr('fill', colors.greyDark)
       .text((d) => creditsAgentLabels[d]);
 
-    // Row labels
+    // Row labels — Bryony: match the day labels in the Time Spent chart
+    // (and the credits caption text) exactly: body font, caption size,
+    // greyDark, not the darker/heavier look this had before.
     svg
       .append('g')
       .selectAll('text')
@@ -112,8 +113,8 @@
       .attr('text-anchor', 'end')
       .attr('dy', '0.35em')
       .attr('font-family', 'var(--font-body)')
-      .attr('font-size', 14)
-      .attr('fill', colors.text)
+      .attr('font-size', 15)
+      .attr('fill', colors.greyDark)
       .text((d) => d);
 
     // Grid cells

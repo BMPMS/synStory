@@ -11,7 +11,7 @@ import pharrellWilliams from '../assets/people/pharrell-williams.png';
 import billyJoel from '../assets/people/billy-joel.png';
 import lorde from '../assets/people/lorde.png';
 import geoffreyRush from '../assets/people/geoffrey-rush.png';
-import marilynMonroe from '../assets/people/marilyn-monroe.png';
+import tildaSwinton from '../assets/people/tilda-swinton.png'; // Bryony: replaces the previous 12th person — add a square-cropped tilda-swinton.png
 import danielTammet from '../assets/people/daniel-tammet.png';
 
 // `profession` — Bryony's own tooltip copy: "just their profession", then
@@ -28,6 +28,6 @@ export const people = [
 	{ name: 'Billy Joel', image: billyJoel, profession: 'singer' },
 	{ name: 'Lorde', image: lorde, profession: 'singer' },
 	{ name: 'Geoffrey Rush', image: geoffreyRush, profession: 'actor' },
-	{ name: 'Marilyn Monroe', image: marilynMonroe, profession: 'actor' },
+	{ name: 'Tilda Swinton', image: tildaSwinton, profession: 'actor' },
 	{ name: 'Daniel Tammet', image: danielTammet, profession: 'writer' }
 ];

@@ -83,6 +83,20 @@ img {
   pointer-events: none;
 }
 
+/* A smaller aside inside a caption: italic, grey, on its own line. */
+.stepText .stepNote {
+  display: block;
+  margin-top: 6px;
+  font-style: italic;
+  color: var(--greyDark, #71706E);
+}
+
+/* Inline aside inside a caption (e.g. a bracketed citation): italic, grey. */
+.stepText .stepAside {
+  font-style: italic;
+  color: var(--greyDark, #71706E);
+}
+
 /* A step carrying several .stepText blocks (one per caption) needs extra
    scroll room so each gets its own dwell time as it passes the pinned
    chart — one screen's worth of height per caption. Overrides the base
@@ -90,12 +104,16 @@ img {
    shared by the 2- and 3-caption variants below. */
 .step--captions-2,
 .step--captions-3,
-.step--captions-4 {
+.step--captions-4,
+.step--sight,
+.step--hover {
   display: block;
 }
 .step--captions-2 .stepText,
 .step--captions-3 .stepText,
-.step--captions-4 .stepText {
+.step--captions-4 .stepText,
+.step--sight .stepText,
+.step--hover .stepText {
   position: absolute;
   /* Bryony: pinning left+right stretched the box to fill the full width
      on every screen size, which left it LEFT-aligned (not centred) the
@@ -119,27 +137,63 @@ img {
    (see step7 in steps.js) now finishes by 35% of this taller step's own
    scroll, itself a full screen's worth of scroll wide, and the cards sit
    well past that point so they only start once the chart is drawn. */
+/* Bryony: the line draw was cut to a third of its length, so this step is
+   53vh shorter (400 -> 347) and its captions 53vh earlier (200 -> 147,
+   320 -> 267). Must match PUB_STEP_VH in steps.js. */
 .step--captions-2 {
-  height: 400vh;
+  height: 307vh;
 }
 .step--captions-2 .stepText:nth-of-type(1) {
-  top: 200vh;
+  top: 147vh;
 }
 .step--captions-2 .stepText:nth-of-type(2) {
-  top: 320vh;
+  top: 227vh; /* 80vh after caption 1 */
+}
+
+/* Step 6 ("So what about our famous synaesthetes?"): 3 captions over a
+   held scene. Height must match SIGHT_STEP_VH in steps.js, which turns
+   the beats below into scroll progress. A caption at `top: T` is centred
+   on screen once 40 + T vh have scrolled: centres at 55, 135 and 215vh (Step 6 is 240vh tall).
+   Caption 1 starts almost immediately (it enters at ~5vh scrolled). */
+.step--sight {
+  height: 240vh;
+}
+.step--sight .stepText:nth-of-type(1) {
+  top: 15vh;
+}
+.step--sight .stepText:nth-of-type(2) {
+  top: 95vh;
+}
+.step--sight .stepText:nth-of-type(3) {
+  top: 175vh;
+}
+
+/* Step 7: one "how to explore" caption, then room left to hover around the
+   finished diagram. The caption is centred on screen once 40 + 60 = 100vh
+   have scrolled. Bryony: the diagram fades out and the next step starts at
+   80% of the old 200vh step, so it's now 160vh. */
+.step--hover {
+  height: 115vh;
+}
+.step--hover .stepText {
+  /* Bryony: "too large a gap between Some of our famous and Hover over" —
+     Step 6 now ends 45vh sooner and this caption sits 45vh nearer the top
+     of its step, so it's 80vh after the last Step 6 caption (was 170vh).
+     Still 100vh left after it to hover around, as before. */
+  top: 15vh;
 }
 
 .step--captions-3 {
-  height: 300vh;
+  height: 260vh;
 }
 .step--captions-3 .stepText:nth-of-type(1) {
   top: 60vh;
 }
 .step--captions-3 .stepText:nth-of-type(2) {
-  top: 160vh;
+  top: 140vh;
 }
 .step--captions-3 .stepText:nth-of-type(3) {
-  top: 260vh;
+  top: 220vh;
 }
 
 /* Step 11 (connections/magnet tray): title+tray reveal (see step10 in
@@ -149,7 +203,7 @@ img {
    every caption below is at its old top plus that same 84vh, so the
    rest of the sequence/pacing is unchanged. */
 .step--captions-4 {
-  height: 644vh;
+  height: 604vh;
 }
 .step--captions-4 .stepText:nth-of-type(1) {
   /* Pushed past the brain's fade-out and this step's own title;
@@ -157,19 +211,19 @@ img {
   top: 224vh;
 }
 .step--captions-4 .stepText:nth-of-type(2) {
-  top: 284vh;
+  top: 304vh;
 }
 .step--captions-4 .stepText:nth-of-type(3) {
-  /* Bryony: "less of a gap between the 1st and second step" —
-     +84vh for the halved brain hold. */
-  top: 344vh;
+  top: 384vh;
 }
 .step--captions-4 .stepText:nth-of-type(4) {
-  top: 484vh;
+  top: 464vh;
 }
 .step--captions-4 .stepText:nth-of-type(5) {
-  top: 584vh;
+  top: 544vh;
 }
+/* Bryony: captions inside a step are a uniform 80vh apart (was 60-140vh);
+   steps.js retimes step9/step10 to match. */
 
 /* Scrollama's progress for a step is driven by its bottom edge crossing
    the offset trigger line (90% down the viewport, per the setup() call

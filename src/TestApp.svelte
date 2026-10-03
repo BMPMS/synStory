@@ -5,11 +5,16 @@
     buildTrialSequence,
     scoreConsistency,
     describeConsistency,
+    buildSpeedTrials,
+    isSpeedAnswerCorrect,
+    scoreSpeed,
+    describeSpeed,
+    SPEED_OPTIONS,
     REPEATS_PER_GRAPHEME
   } from './lib/data/graphemeTest.js';
   import { supabase, supabaseConfigured } from './lib/supabase.js';
 
-  let screen = $state('intro'); // 'intro' | 'instructions' | 'demo' | 'trial' | 'results'
+  let screen = $state('intro'); // 'intro' | 'instructions' | 'demo' | 'confirmStart' | 'trial' | 'speedIntro' | 'speed' | 'results'
   let name = $state('');
   // No email/account — honour system instead, so there's nothing
   // personally identifying to store (and no GDPR hassle). Repeating the
@@ -29,27 +34,25 @@
   // Trial start time, used to derive a live "~N min left" estimate.
   let testStartTime = $state(0);
 
-  // Hand-built hue/saturation wheel, not native <input type="color">,
-  // so it's consistent across browsers and starts neutral each trial.
-  let hue = $state(0); // 0-360
-  let sat = $state(0); // 0-1, distance from centre
-  let wheelEl = $state();
-  let draggingWheel = false;
+  // Hand-built colour picker (not native <input type="color">, so it's
+  // consistent across browsers): a saturation/brightness square plus a hue
+  // bar, like the official Synaesthesia Battery's. Left edge of the square
+  // is the greys (white at the top to black at the bottom), so every colour
+  // is reachable. Starts neutral (white) each trial.
+  let hue = $state(0); // 0-360, from the hue bar
+  let sat = $state(0); // 0-1, left to right across the square
+  let val = $state(1); // 0-1, bottom to top of the square
+  let touched = $state(false); // has the square been used this trial?
+  let squareEl = $state();
+  let hueEl = $state();
+  let greyEl = $state();
+  let draggingSquare = false;
+  let draggingHue = false;
+  let draggingGrey = false;
 
-  // Bug fix: fixed brightness=1 meant no shades (browns, navy) were
-  // reachable. Radius now carries white -> hue -> black in one drag:
-  // inner half tints, outer half shades. True neutral grey still unreachable.
-  function hueRadiusToHex(h, t) {
-    let s, v;
-    if (t <= 0.5) {
-      s = t / 0.5;
-      v = 1;
-    } else {
-      s = 1;
-      v = 1 - (t - 0.5) / 0.5;
-    }
+  function hsvToHex(h, s, v) {
     const c = v * s;
-    const hp = h / 60;
+    const hp = (h % 360) / 60;
     const x = c * (1 - Math.abs((hp % 2) - 1));
     let r = 0,
       g = 0,
@@ -78,67 +81,108 @@
     return '#' + [r, g, b].map((channel) => toByte(channel).toString(16).padStart(2, '0')).join('');
   }
 
-  let currentColor = $derived(hueRadiusToHex(hue, sat));
+  let currentColor = $derived(hsvToHex(hue, sat, val));
 
-  // Shared by the real wheel's thumb and the demo wheel's animated one.
-  function hueRadiusToXYPercent(h, t) {
-    const rad = (h * Math.PI) / 180;
-    return { x: Math.sin(rad) * t * 50, y: -Math.cos(rad) * t * 50 };
-  }
-  const thumbPos = $derived.by(() => hueRadiusToXYPercent(hue, sat));
-
-  function resetWheel() {
+  function resetPicker() {
     hue = 0;
     sat = 0;
+    val = 1;
+    touched = false;
   }
 
-  function updateFromWheelEvent(e) {
-    const rect = wheelEl.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const dx = e.clientX - cx;
-    const dy = e.clientY - cy;
-    const radius = rect.width / 2;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    sat = Math.min(1, dist / radius);
-    hue = ((Math.atan2(dx, -dy) * 180) / Math.PI + 360) % 360;
+  const clamp01 = (n) => Math.min(1, Math.max(0, n));
+
+  function updateFromSquareEvent(e) {
+    const rect = squareEl.getBoundingClientRect();
+    sat = clamp01((e.clientX - rect.left) / rect.width);
+    val = 1 - clamp01((e.clientY - rect.top) / rect.height);
+    touched = true;
   }
-  function onWheelPointerDown(e) {
-    draggingWheel = true;
-    wheelEl.setPointerCapture(e.pointerId);
-    updateFromWheelEvent(e);
+  function onSquarePointerDown(e) {
+    draggingSquare = true;
+    squareEl.setPointerCapture(e.pointerId);
+    updateFromSquareEvent(e);
   }
-  function onWheelPointerMove(e) {
-    if (draggingWheel) updateFromWheelEvent(e);
+  function onSquarePointerMove(e) {
+    if (draggingSquare) updateFromSquareEvent(e);
   }
-  function onWheelPointerUp() {
-    draggingWheel = false;
+  function onSquarePointerUp() {
+    draggingSquare = false;
   }
 
-  // Keyboard access: left/right rotate hue, up/down move saturation.
-  function onWheelKeyDown(e) {
+  function updateFromHueEvent(e) {
+    const rect = hueEl.getBoundingClientRect();
+    hue = clamp01((e.clientY - rect.top) / rect.height) * 359.99;
+  }
+  function onHuePointerDown(e) {
+    draggingHue = true;
+    hueEl.setPointerCapture(e.pointerId);
+    updateFromHueEvent(e);
+  }
+  function onHuePointerMove(e) {
+    if (draggingHue) updateFromHueEvent(e);
+  }
+  function onHuePointerUp() {
+    draggingHue = false;
+  }
+
+  // Tone slider (white -> black), like the official picker's: picks a pure
+  // grey, which is the square's left edge, so it simply sets sat to 0.
+  function updateFromGreyEvent(e) {
+    const rect = greyEl.getBoundingClientRect();
+    sat = 0;
+    val = 1 - clamp01((e.clientX - rect.left) / rect.width);
+    touched = true;
+  }
+  function onGreyPointerDown(e) {
+    draggingGrey = true;
+    greyEl.setPointerCapture(e.pointerId);
+    updateFromGreyEvent(e);
+  }
+  function onGreyPointerMove(e) {
+    if (draggingGrey) updateFromGreyEvent(e);
+  }
+  function onGreyPointerUp() {
+    draggingGrey = false;
+  }
+  function onGreyKeyDown(e) {
+    const step = e.shiftKey ? 0.1 : 0.03;
+    if (e.key === 'ArrowLeft') val = clamp01((sat === 0 ? val : 1) + step);
+    else if (e.key === 'ArrowRight') val = clamp01((sat === 0 ? val : 1) - step);
+    else return;
+    sat = 0;
+    touched = true;
+    e.preventDefault();
+  }
+
+  // Keyboard access: arrows move the square's thumb (shift = bigger steps);
+  // up/down on the hue bar moves the hue.
+  function onSquareKeyDown(e) {
+    const step = e.shiftKey ? 0.1 : 0.03;
+    if (e.key === 'ArrowLeft') sat = clamp01(sat - step);
+    else if (e.key === 'ArrowRight') sat = clamp01(sat + step);
+    else if (e.key === 'ArrowUp') val = clamp01(val + step);
+    else if (e.key === 'ArrowDown') val = clamp01(val - step);
+    else return;
+    touched = true;
+    e.preventDefault();
+  }
+  function onHueKeyDown(e) {
     const step = e.shiftKey ? 10 : 2;
-    if (e.key === 'ArrowLeft') {
-      hue = (hue - step + 360) % 360;
-      e.preventDefault();
-    } else if (e.key === 'ArrowRight') {
-      hue = (hue + step) % 360;
-      e.preventDefault();
-    } else if (e.key === 'ArrowUp') {
-      sat = Math.min(1, sat + 0.05);
-      e.preventDefault();
-    } else if (e.key === 'ArrowDown') {
-      sat = Math.max(0, sat - 0.05);
-      e.preventDefault();
-    }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') hue = (hue - step + 360) % 360;
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') hue = (hue + step) % 360;
+    else return;
+    e.preventDefault();
   }
 
-  // Scripted demo: thumb animates from neutral centre to a worked example.
+  // Scripted demo: the thumbs animate from neutral to a worked example.
   const DEMO_LETTER = 'A';
   const DEMO_TARGET_HUE = 42; // an orangey yellow
-  const DEMO_TARGET_RADIUS = 0.68; // "deep" — into the darkening outer half
+  const DEMO_TARGET_SAT = 1;
+  const DEMO_TARGET_VAL = 0.64; // "deep" — darkened
   let demoHue = $state(0);
   let demoSat = $state(0);
+  let demoVal = $state(1);
   let demoAnimFrame = null;
 
   function runDemoAnimation() {
@@ -148,7 +192,8 @@
       const raw = Math.min(1, (now - start) / durationMs);
       const eased = 1 - Math.pow(1 - raw, 3); // ease-out, settles like a real drag
       demoHue = DEMO_TARGET_HUE * eased;
-      demoSat = DEMO_TARGET_RADIUS * eased;
+      demoSat = DEMO_TARGET_SAT * eased;
+      demoVal = 1 - (1 - DEMO_TARGET_VAL) * eased;
       demoAnimFrame = raw < 1 ? requestAnimationFrame(tick) : null;
     }
     demoAnimFrame = requestAnimationFrame(tick);
@@ -158,6 +203,7 @@
     if (screen === 'demo') {
       demoHue = 0;
       demoSat = 0;
+      demoVal = 1;
       runDemoAnimation();
     }
     return () => {
@@ -165,8 +211,7 @@
     };
   });
 
-  let demoColor = $derived(hueRadiusToHex(demoHue, demoSat));
-  const demoThumbPos = $derived.by(() => hueRadiusToXYPercent(demoHue, demoSat));
+  let demoColor = $derived(hsvToHex(demoHue, demoSat, demoVal));
 
   let results = $state(null); // { perGrapheme, overallScore } once scored
 
@@ -212,7 +257,7 @@
     trialIndex = 0;
     responsesByGrapheme = {};
     testStartTime = Date.now();
-    resetWheel();
+    resetPicker();
     screen = 'trial';
   }
 
@@ -224,11 +269,53 @@
 
     if (trialIndex + 1 >= totalTrials()) {
       results = scoreConsistency(responsesByGrapheme);
-      screen = 'results';
+      // The colour test is done and saved; the speed test follows, then
+      // the combined results screen.
       saveResults();
+      screen = 'speedIntro';
     } else {
       trialIndex += 1;
-      resetWheel();
+      resetPicker();
+    }
+  }
+
+  // --- Speed congruency test ---
+  /** @type {{grapheme: string, options: string[], correctIndex: number}[]} */
+  let speedTrials = $state([]);
+  let speedIndex = $state(0);
+  let speedShownAt = 0;
+  let speedAnswers = [];
+  let speedResults = $state(null); // { total, correctCount, accuracy, medianMs }
+
+  const currentSpeedTrial = $derived(speedTrials[speedIndex]);
+
+  function showSpeedTrial() {
+    // Start the clock once the swatches have actually been painted.
+    requestAnimationFrame(() => requestAnimationFrame(() => (speedShownAt = performance.now())));
+  }
+
+  function startSpeedTest() {
+    speedTrials = buildSpeedTrials(responsesByGrapheme);
+    speedIndex = 0;
+    speedAnswers = [];
+    screen = 'speed';
+    showSpeedTrial();
+  }
+
+  function answerSpeed(clickedIndex) {
+    if (screen !== 'speed' || !currentSpeedTrial) return;
+    const rt = performance.now() - speedShownAt;
+    speedAnswers.push({
+      grapheme: currentSpeedTrial.grapheme,
+      correct: isSpeedAnswerCorrect(currentSpeedTrial, clickedIndex),
+      rt
+    });
+    if (speedIndex + 1 >= speedTrials.length) {
+      speedResults = scoreSpeed(speedAnswers);
+      screen = 'results';
+    } else {
+      speedIndex += 1;
+      showSpeedTrial();
     }
   }
 
@@ -260,7 +347,7 @@
   // label only (e.g. "highly consistent"), never the score or the actual
   // colour picks.
   function shareResult(bandLabel) {
-    const text = `I just found out I'm a "${bandLabel.toLowerCase()}" letters + numbers → colour synaesthete (or not!) according to this quick colour test — curious what you'd get?`;
+    const text = `I just found out I'm a "${bandLabel.toLowerCase()}" grapheme-colour synaesthete (or not!) according to this quick colour test — curious what you'd get?`;
     const url = `${window.location.origin}/test.html`;
     if (navigator.share) {
       navigator.share({ title: 'Synaesthesia Battery Test', text, url }).catch(() => {});
@@ -274,12 +361,20 @@
   }
 
   // Enter/Return finishes a trial the same as clicking Next/Finish —
-  // only once a colour's actually been chosen (sat === 0 means the wheel
-  // is still at its untouched neutral centre), matching the button's own
-  // disabled condition below. Global rather than on the wheel itself, so
+  // only once a colour's actually been chosen (the square has been used),
+  // matching the button's own disabled condition below. Global rather than on the wheel itself, so
   // it works regardless of what has focus.
   function handleTrialKeydown(e) {
-    if (screen !== 'trial' || e.key !== 'Enter' || sat === 0) return;
+    // Speed test: keys 1-6 pick the swatches left to right, top to bottom.
+    if (screen === 'speed') {
+      const n = Number(e.key);
+      if (n >= 1 && n <= (currentSpeedTrial?.options.length ?? 0)) {
+        e.preventDefault();
+        answerSpeed(n - 1);
+      }
+      return;
+    }
+    if (screen !== 'trial' || e.key !== 'Enter' || !touched) return;
     e.preventDefault();
     nextTrial();
   }
@@ -295,7 +390,7 @@
         <p class="body">
           Do letters and numbers make you see colours? This short test checks how
           consistent your own colour associations are — the same test researchers use
-          to study <strong>letters + numbers → colour</strong> synaesthesia.
+          to study <strong>grapheme-colour</strong> synaesthesia.
         </p>
         <a class="storyLink" href="/">Read the story behind this test →</a>
         <label class="fieldLabel" for="nameInput">Your name</label>
@@ -345,17 +440,14 @@
         </button>
       </div>
     {:else if screen === 'instructions'}
-      <div class="screenContent">
+      <div class="screenContent centredScreen">
         <h2 class="subtitle">How it works</h2>
-        <p class="body">
-          You'll see 36 letters and numbers, each shown {REPEATS_PER_GRAPHEME} times in a
-          random order — 108 rounds in total.
+        <p class="body bodyGap">
+          You'll see <strong>36 letters and numbers</strong>, each shown
+          <strong>{REPEATS_PER_GRAPHEME} times</strong> in a random order — 108 rounds in total.
         </p>
-        <p class="body">
-          For each one, pick whichever colour feels right. Don't overthink it, and it's
-          completely fine if your answer changes between rounds — that's exactly what
-          this measures.
-        </p>
+        <p class="body">For each one, pick whichever colour feels right. Don't overthink it.</p>
+        <p class="body">Then there's a quick <strong>speed test</strong>.</p>
         <button class="primaryButton" onclick={() => (screen = 'demo')}>Start</button>
       </div>
     {:else if screen === 'demo'}
@@ -366,11 +458,21 @@
         </div>
 
         <div class="trialRow">
-          <div class="colorWheel demoWheel" aria-hidden="true">
-            <div
-              class="wheelThumb"
-              style="left: calc(50% + {demoThumbPos.x}%); top: calc(50% + {demoThumbPos.y}%); background: {demoColor}"
-            ></div>
+          <div class="picker demoPicker" aria-hidden="true">
+            <div class="pickerMain">
+            <div class="svSquare" style="--hue: {demoHue}">
+              <div
+                class="pickerThumb"
+                style="left: {demoSat * 100}%; top: {(1 - demoVal) * 100}%; background: {demoColor}"
+              ></div>
+            </div>
+            <div class="hueBar">
+              <div class="hueThumb" style="top: {(demoHue / 360) * 100}%"></div>
+            </div>
+            </div>
+            <div class="greyBar">
+              <div class="greyThumb greyThumbIdle" style="left: {(1 - demoVal) * 100}%"></div>
+            </div>
           </div>
 
           <div class="graphemeStage">
@@ -383,13 +485,12 @@
         </button>
       </div>
     {:else if screen === 'confirmStart'}
-      <div class="screenContent">
+      <div class="screenContent centredScreen">
         <h2 class="subtitle">One thing before you start</h2>
-        <p class="body">
-          This takes at least 5 minutes — 108 rounds, start to finish, with no way
-          to pause partway through. Worth making sure you've got the time before
-          you dive in.
-        </p>
+        <p class="body">This takes 10–15 minutes</p>
+        <p class="body">108 rounds<br />+ short speed test</p>
+        <p class="body">Start to finish, with no way to pause partway through.</p>
+        <p class="body">Worth making sure you've got the time before you <strong>dive in</strong>.</p>
         <button class="primaryButton" onclick={startTrials}>Yes, I'm ready</button>
         <button
           class="secondaryButton"
@@ -406,30 +507,68 @@
             <div class="progressFill" style="width: {(trialNumber / totalTrials()) * 100}%"></div>
           </div>
           <p class="progressLabel">{progressLabel}</p>
-          <p class="colorHint">Tap or drag on the wheel to choose a colour</p>
         </div>
 
         <div class="trialRow">
-          <div
-            class="colorWheel"
-            bind:this={wheelEl}
-            onpointerdown={onWheelPointerDown}
-            onpointermove={onWheelPointerMove}
-            onpointerup={onWheelPointerUp}
-            onpointercancel={onWheelPointerUp}
-            onkeydown={onWheelKeyDown}
-            role="slider"
-            tabindex="0"
-            aria-label="Choose a colour"
-            aria-valuetext={currentColor}
-            aria-valuenow={Math.round(hue)}
-            aria-valuemin="0"
-            aria-valuemax="360"
-          >
+          <div class="picker">
+            <div class="pickerMain">
             <div
-              class="wheelThumb"
-              style="left: calc(50% + {thumbPos.x}%); top: calc(50% + {thumbPos.y}%); background: {currentColor}"
-            ></div>
+              class="svSquare"
+              style="--hue: {hue}"
+              bind:this={squareEl}
+              onpointerdown={onSquarePointerDown}
+              onpointermove={onSquarePointerMove}
+              onpointerup={onSquarePointerUp}
+              onpointercancel={onSquarePointerUp}
+              onkeydown={onSquareKeyDown}
+              role="slider"
+              tabindex="0"
+              aria-label="Choose how pale, bright or dark the colour is"
+              aria-valuetext={currentColor}
+              aria-valuenow={Math.round(sat * 100)}
+              aria-valuemin="0"
+              aria-valuemax="100"
+            >
+              <div
+                class="pickerThumb"
+                style="left: {sat * 100}%; top: {(1 - val) * 100}%; background: {currentColor}"
+              ></div>
+            </div>
+            <div
+              class="hueBar"
+              bind:this={hueEl}
+              onpointerdown={onHuePointerDown}
+              onpointermove={onHuePointerMove}
+              onpointerup={onHuePointerUp}
+              onpointercancel={onHuePointerUp}
+              onkeydown={onHueKeyDown}
+              role="slider"
+              tabindex="0"
+              aria-label="Choose the hue"
+              aria-valuenow={Math.round(hue)}
+              aria-valuemin="0"
+              aria-valuemax="360"
+            >
+              <div class="hueThumb" style="top: {(hue / 360) * 100}%"></div>
+            </div>
+            </div>
+            <div
+              class="greyBar"
+              bind:this={greyEl}
+              onpointerdown={onGreyPointerDown}
+              onpointermove={onGreyPointerMove}
+              onpointerup={onGreyPointerUp}
+              onpointercancel={onGreyPointerUp}
+              onkeydown={onGreyKeyDown}
+              role="slider"
+              tabindex="0"
+              aria-label="Choose a grey, from white to black"
+              aria-valuenow={Math.round((1 - val) * 100)}
+              aria-valuemin="0"
+              aria-valuemax="100"
+            >
+              <div class="greyThumb" class:greyThumbIdle={sat > 0} style="left: {(1 - val) * 100}%"></div>
+            </div>
           </div>
 
           <div class="graphemeStage">
@@ -437,13 +576,47 @@
           </div>
         </div>
 
-        <button class="primaryButton" disabled={sat === 0} onclick={nextTrial}>
+        <button class="primaryButton" disabled={!touched} onclick={nextTrial}>
           {trialIndex + 1 >= totalTrials() ? 'Finish' : 'Next'}
         </button>
         <p class="keyHint">or press Return</p>
       </div>
+    {:else if screen === 'speedIntro'}
+      <div class="screenContent">
+        <h2 class="subtitle">Now, a speed test</h2>
+        <p class="body">
+          Colour test done! One more part, a few more minutes.
+        </p>
+        <p class="body">
+          You'll see a letter or number, with {SPEED_OPTIONS} colours underneath. Tap the one
+          <strong>you chose for it</strong> as quickly as you can. Don't stop to think — go with
+          your first instinct.
+        </p>
+        <button class="primaryButton" onclick={startSpeedTest}>Start</button>
+      </div>
+    {:else if screen === 'speed'}
+      <div class="screenContent speedScreen">
+        <div class="progressTrack">
+          <div class="progressFill" style="width: {((speedIndex + 1) / speedTrials.length) * 100}%"></div>
+        </div>
+        <p class="progressLabel">{speedIndex + 1} / {speedTrials.length}</p>
+        <p class="colorHint">Tap the colour you chose for this</p>
+        <div class="speedGrapheme" aria-live="polite">{currentSpeedTrial.grapheme}</div>
+        <div class="speedGrid">
+          {#each currentSpeedTrial.options as option, i (speedIndex + '-' + i)}
+            <button
+              type="button"
+              class="speedSwatch"
+              style="background: {option}"
+              aria-label="Colour {i + 1}"
+              onclick={() => answerSpeed(i)}
+            ></button>
+          {/each}
+        </div>
+      </div>
     {:else if screen === 'results'}
       {@const band = describeConsistency(results.overallScore)}
+      {@const speedBand = describeSpeed(speedResults)}
       <div class="screenContent resultsScreen">
         <h2 class="subtitle">Nice work, {name}!</h2>
         <p class="scoreLabel">{band.label}</p>
@@ -463,6 +636,13 @@
             </div>
           {/each}
         </div>
+
+        <h3 class="resultsSubheading">Speed test</h3>
+        <p class="scoreLabel">{speedBand.label}</p>
+        <p class="body">{speedBand.detail}</p>
+        <p class="body">
+          <strong>{speedResults.correctCount} of {speedResults.total}</strong> correct{#if speedResults.medianMs != null}, typically in <strong>{(speedResults.medianMs / 1000).toFixed(1)}s</strong>{/if}.
+        </p>
 
         <p class="footnote">
           This is a fun, informal version of the real test — not a diagnostic tool.
@@ -494,6 +674,9 @@
           <p class="fieldHint">Copied — paste it anywhere!</p>
         {/if}
 
+        <a class="storyLink" href="https://synesthete.ircn.jp/" target="_blank" rel="noopener">
+          Want to know more or take more tests? →
+        </a>
         <a class="storyLink" href="/">Read the story behind this test →</a>
       </div>
     {/if}
@@ -508,8 +691,12 @@
   :root {
     --phone-w: 375px;
     --phone-h: 667px;
-    /* Wheel sized off viewport height so it grows with available space. */
-    --wheelSize: clamp(220px, 34dvh, 340px);
+    /* Picker + letter each get a share of the PHONE's height (not the
+       window's, which can be much taller than the phone on desktop), so
+       the two plus the button always fit on the screen. */
+    --wheelSize: clamp(130px, calc((min(var(--phone-h), 100dvh) - 290px) / 2), 340px);
+    /* The square must also leave room for the hue bar beside it. */
+    --pickerSize: min(calc(var(--wheelSize) * 1.2), calc(min(var(--phone-w), 100vw) - 48px - 40px));
   }
   @media (max-height: 520px) {
     :root {
@@ -517,6 +704,7 @@
       --phone-h: 375px;
       /* Width is ample in landscape; wheel sized directly off height instead. */
       --wheelSize: clamp(200px, 50dvh, 300px);
+      --pickerSize: var(--wheelSize);
     }
   }
 
@@ -584,6 +772,15 @@
     line-height: 1.5;
     margin: 0;
     color: var(--text);
+  }
+
+  .centredScreen {
+    text-align: center;
+  }
+
+  /* An extra line of space after the paragraph (Bryony). */
+  .bodyGap {
+    margin-bottom: 1.5em;
   }
 
   .fieldLabel {
@@ -683,6 +880,8 @@
     display: contents;
   }
   .progressTrack {
+    /* One line of space above; the label stays right beside the bar. */
+    margin: calc(var(--text-body, 16px) * 1.5) 0 0;
     height: 6px;
     border-radius: 3px;
     background: var(--backgroundTint);
@@ -690,7 +889,7 @@
   }
   .progressFill {
     height: 100%;
-    background: var(--blue);
+    background: var(--purple);
     transition: width 0.2s ease;
   }
   .progressLabel {
@@ -713,7 +912,7 @@
     gap: 16px;
   }
   .graphemeStage {
-    flex: 0 0 var(--wheelSize);
+    flex: 0 0 calc(var(--wheelSize) * 0.8);
     width: 100%;
     display: flex;
     align-items: center;
@@ -722,7 +921,7 @@
   .grapheme {
     font-family: var(--font-heading);
     font-weight: 600;
-    font-size: calc(var(--wheelSize) * 0.72);
+    font-size: calc(var(--wheelSize) * 0.58 * 1.2);
     line-height: 1;
     transition: color 0.1s ease;
     /* Soft shadow keeps pale colours readable against the warm-ivory bg. */
@@ -730,23 +929,88 @@
       0 0 1px rgba(0, 0, 0, 0.25),
       0 2px 6px rgba(0, 0, 0, 0.12);
   }
-  .colorWheel {
+  /* Official-style picker: a saturation/brightness square plus a hue bar. */
+  .picker {
     flex-shrink: 0;
-    width: var(--wheelSize);
-    height: var(--wheelSize);
-    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .pickerMain {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+    height: var(--pickerSize);
+  }
+  /* Tone slider: white -> black, the width of the square. */
+  .greyBar {
     position: relative;
+    width: var(--pickerSize);
+    height: 24px;
     touch-action: none;
     cursor: pointer;
     border: 1px solid var(--grey);
-    /* Matches hueRadiusToHex(): white/black overlays carve the hue ring
-       into white -> hue -> black, inner/outer half respectively. */
-    background:
-      radial-gradient(circle at center, rgba(0, 0, 0, 0) 50%, #000 100%),
-      radial-gradient(circle at center, #fff 0%, rgba(255, 255, 255, 0) 50%),
-      conic-gradient(from 0deg, red, yellow, lime, cyan, blue, magenta, red);
+    border-radius: 6px;
+    background: linear-gradient(to right, #fff, #000);
   }
-  .wheelThumb {
+  .greyBar:focus-visible {
+    outline: 3px solid var(--purple);
+    outline-offset: 2px;
+  }
+  .greyThumb {
+    position: absolute;
+    top: -4px;
+    bottom: -4px;
+    width: 8px;
+    border-radius: 4px;
+    border: 2px solid #fff;
+    box-shadow:
+      0 0 0 1.5px rgba(0, 0, 0, 0.35),
+      0 1px 3px rgba(0, 0, 0, 0.25);
+    transform: translateX(-50%);
+    cursor: grab;
+  }
+  /* Greyed back while the colour isn't a pure grey. */
+  .greyThumbIdle {
+    opacity: 0.45;
+  }
+  .svSquare {
+    position: relative;
+    width: var(--pickerSize);
+    height: var(--pickerSize);
+    touch-action: none;
+    cursor: pointer;
+    border: 1px solid var(--grey);
+    border-radius: 6px;
+    /* x = saturation (white -> pure hue), y = brightness (full -> black). */
+    background:
+      linear-gradient(to top, #000, rgba(0, 0, 0, 0)),
+      linear-gradient(to right, #fff, hsl(var(--hue) 100% 50%));
+  }
+  .hueBar {
+    position: relative;
+    width: 28px;
+    touch-action: none;
+    cursor: pointer;
+    border: 1px solid var(--grey);
+    border-radius: 6px;
+    background: linear-gradient(to bottom, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  }
+  /* Pressing anywhere on a track starts a drag, so show it as a grab. */
+  .svSquare:active,
+  .hueBar:active,
+  .greyBar:active,
+  .svSquare:active .pickerThumb,
+  .hueBar:active .hueThumb,
+  .greyBar:active .greyThumb {
+    cursor: grabbing;
+  }
+  .svSquare:focus-visible,
+  .hueBar:focus-visible {
+    outline: 3px solid var(--purple);
+    outline-offset: 2px;
+  }
+  .pickerThumb {
     position: absolute;
     width: 20px;
     height: 20px;
@@ -756,7 +1020,20 @@
       0 0 0 1.5px rgba(0, 0, 0, 0.35),
       0 1px 3px rgba(0, 0, 0, 0.25);
     transform: translate(-50%, -50%);
-    pointer-events: none;
+    cursor: grab;
+  }
+  .hueThumb {
+    position: absolute;
+    left: -4px;
+    right: -4px;
+    height: 8px;
+    border-radius: 4px;
+    border: 2px solid #fff;
+    box-shadow:
+      0 0 0 1.5px rgba(0, 0, 0, 0.35),
+      0 1px 3px rgba(0, 0, 0, 0.25);
+    transform: translateY(-50%);
+    cursor: grab;
   }
   .colorHint {
     font-family: var(--font-body);
@@ -773,14 +1050,21 @@
     font-size: var(--text-caption, 14px);
     color: var(--purple);
     text-align: center;
-    margin: 0;
+    /* Bryony: "Here's an example" goes down a line height. */
+    margin: calc(var(--text-caption, 14px) * 1.5) 0 0;
   }
   .demoQuote {
     font-style: italic;
   }
-  .demoWheel {
+  .demoPicker .svSquare,
+  .demoPicker .hueBar,
+  .demoPicker .greyBar,
+  .demoPicker .pickerThumb,
+  .demoPicker .hueThumb,
+  .demoPicker .greyThumb {
     /* Playback only, no drag handlers — shouldn't invite a click. */
     cursor: default;
+    pointer-events: none;
   }
 
   /* Desktop/tablet: wheel-then-letter top-to-bottom (`column`), chrome
@@ -789,6 +1073,11 @@
     .trialScreen,
     .demoScreen {
       padding-top: 64px;
+    }
+    /* Chrome is pinned to the top strip here; the bar keeps its line of
+       space above and the content itself stays where it was. */
+    .progressTrack {
+      margin: calc(var(--text-body, 16px) * 1.5) 0 0;
     }
     .screenChrome {
       display: flex;
@@ -812,6 +1101,9 @@
     .trialScreen,
     .demoScreen {
       padding-top: 64px;
+    }
+    .progressTrack {
+      margin: 0;
     }
     .screenChrome {
       display: flex;
@@ -873,5 +1165,61 @@
     font-size: var(--text-micro, 12px);
     color: var(--grey);
     margin: 0;
+  }
+  .resultsSubheading {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    font-size: var(--text-body, 16px);
+    color: var(--greyDark);
+    margin: 12px 0 0;
+  }
+
+  /* --- speed test --- */
+  .speedScreen {
+    align-items: stretch;
+  }
+  .speedGrapheme {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-heading);
+    font-weight: 600;
+    font-size: clamp(80px, 24dvh, 160px);
+    line-height: 1;
+    color: var(--text);
+  }
+  .speedGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .speedSwatch {
+    aspect-ratio: 1 / 1;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.18);
+    cursor: pointer;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .speedSwatch:active {
+    transform: scale(0.96);
+  }
+  .speedSwatch:focus-visible {
+    outline: 3px solid var(--purple);
+    outline-offset: 2px;
+  }
+  @media (max-height: 520px) {
+    .speedScreen {
+      overflow-y: auto;
+    }
+    .speedGrapheme {
+      flex: 0 0 auto;
+      font-size: 72px;
+    }
+    .speedGrid {
+      grid-template-columns: repeat(6, 1fr);
+    }
   }
 </style>

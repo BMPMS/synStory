@@ -26,6 +26,7 @@
   import { personIcon } from '../data/personIcon.js'; // placeholder icon, real art later
   import { sightSubIcons } from '../data/sightSubIcons.js'; // sight's 3 sub-icons, step 5
   import { synaesthesiaLinks } from '../data/synaesthesiaLinks.js'; // who has which cross-sense association (step 6)
+  import { famousQuotes } from '../data/famousQuotes.js'; // one quote per person, shown in the hover panel under the diagram
   import {
     publicationsByDecade,
     publicationsMinYear,
@@ -50,7 +51,14 @@
         const p = e.people.find((p) => p.name === name);
         const from = p.reverseLabel ? e.to : e.from;
         const to = p.reverseLabel ? e.from : e.to;
-        return { text: `${senseDisplayLabel(from)} → ${senseDisplayLabel(to)}`, edgeKey: `${e.from}-${e.to}` };
+        return {
+          text: `${senseDisplayLabel(from)} → ${senseDisplayLabel(to)}`,
+          fromLabel: senseDisplayLabel(from),
+          toLabel: senseDisplayLabel(to),
+          fromKey: from,
+          toKey: to,
+          edgeKey: `${e.from}-${e.to}`
+        };
       });
   }
 
@@ -154,7 +162,10 @@
     const safeRight = Math.max(safeLeft, right - r - halfTailSpan);
     const tailX = lerp(safeLeft, safeRight, personT);
 
-    const P = (dx, dy) => `${(tailX + dx * scale).toFixed(2)} ${(bottom + dy * scale).toFixed(2)}`;
+    // Bryony: tail/pointer half the height — only the vertical reach is
+    // compressed (dy), width/shape in x is untouched.
+    const tailHeightScale = 0.5;
+    const P = (dx, dy) => `${(tailX + dx * scale).toFixed(2)} ${(bottom + dy * scale * tailHeightScale).toFixed(2)}`;
     const curveCommands = (points) => {
       const out = [];
       for (let i = 0; i < points.length; i += 3) {
@@ -232,11 +243,14 @@
 
     // The 3 .sightLabel texts in sequence, kept as named constants so
     // layoutSight() and the progress setters always agree on wording.
-    const sightSplitText = 'SIGHTS splits into 3 sub groups';
-    const sightFamousText = 'So what about the famous synetheses?';
-    const closingHeaderText = 'What are their sense → sense triggers?';
+    // Bryony: Step 6 now keeps ONE header for its whole length (the old
+    // "SIGHT splits into 3 sub groups" line moved into the scrolling
+    // captions in App.svelte), so the 'split' and 'famous' stages share it.
+    const sightFamousText = 'So what about our famous synaesthetes?';
+    const sightSplitText = sightFamousText;
     // Which of the 3 texts was last set — same pattern as linksRevealT.
-    // One of 'split' | 'famous' | 'closing'.
+    // One of 'split' | 'famous' (Bryony: no 'closing' header any more — the
+    // same title now stays through Step 7).
     let sightHeaderStage = 'split';
     let sightLabelFontSize = 18;
     let sightLabelWrapWidth = 0;
@@ -282,10 +296,10 @@
     const personIconNodes = quotes.map(() => ({ x: 0, y: 0, scale: 1, cropped: false }));
     let personIconGroups;
 
-    // Step 9: 36 participant icons, 18 synesthetes + 18 controls, colour
+    // Step 9: 36 participant icons, 18 synaesthetes + 18 controls, colour
     // picked once (cosmetic only).
     const participantNodes = Array.from({ length: 36 }, (_, i) => ({
-      group: i < 18 ? 'synesthete' : 'control',
+      group: i < 18 ? 'synaesthete' : 'control',
       index: i < 18 ? i : i - 18,
       color: i < 18 ? step3.icons.colors[Math.floor(Math.random() * step3.icons.colors.length)] : colors.grey,
       x: 0,
@@ -297,7 +311,7 @@
 
     // Fixed for the whole brain step, per Bryony — study details now
     // scroll past as separate step text blocks (see App.svelte) instead.
-    const brainQuestionText = 'Is synesthese brain activity different?';
+    const brainQuestionText = 'Is synaesthete brain activity different?';
     // Real rendered icon-row bounds, from layoutSenses(), used by layoutClosing().
     let iconsTopY = 0;
     let iconsBottomY = 0;
@@ -421,7 +435,7 @@
     // Fixed for the whole publications chart, per Bryony — the marker/
     // focus text now scroll past as separate step text blocks instead
     // (see App.svelte).
-    const publicationsChartTitleText = 'This is not old news - there is a long publication history.';
+    const publicationsChartTitleText = 'But is it real?';
     let pubMarkerT = 0;
     // Bryony: colour by effect, size by volume — fixed d3 scales, tuned live.
     const brainEffectColorScale = d3.scaleLinear().domain([0, 4.8]).range(['white', colors.green]);
@@ -482,6 +496,7 @@
     let connectionsBandCenterX = 0;
     let heatmapRanksSeeded = false; // seedHeatmapRanks() runs once only
     let currentHeatmapProgress = 0; // last t, reapplied by layoutHeatmap() on resize
+    let currentConnectionsProgress = 0; // last step-10 t, so the spotlight can span steps 10 -> 11
     const heatmapColorInterpCache = {}; // cached colour interpolators, keyed by colour pair
     // Letter -> its own correct colour, used by setHeatmapProgress().
     const magnetTemplateColorByLetter = {};
@@ -563,6 +578,212 @@
 
     function hidePersonTooltip() {
       svg.select('.personTooltip').style('opacity', 0);
+    }
+
+    // ---- Hover panel (Steps 6-7) -------------------------------------
+    // Bryony: instead of a floating tooltip over the busy diagram, hovering
+    // a famous person's photo fills a panel UNDER the diagram — name, their
+    // relationships joined with " · ", then their quote — so it never
+    // overlaps anything. layoutPersonPanel() finds the free band below the
+    // composition; the panel's font scale is then picked so the tallest of
+    // the 12 people still fits with padding below (quotes vary in length).
+    const quoteByName = Object.fromEntries(famousQuotes.map((q) => [q.name, q.quote]));
+    const highlightsByName = Object.fromEntries(famousQuotes.map((q) => [q.name, q.highlights || []]));
+    // Panel colours: each sense's own icon colour; the 3 sight sub-groups share sight's.
+    const SIGHT_SUB_KEYS = new Set(['lettersNumbers', 'colors', 'objects']);
+    const panelSenseColor = (key) => senseColors[SIGHT_SUB_KEYS.has(key) ? 'sight' : key];
+
+    // Character ranges of a quote to tint, longest match first so a phrase
+    // beats a word inside it; overlaps dropped.
+    function quoteHighlightRanges(name, quote) {
+      const taken = new Array(quote.length).fill(false);
+      const ranges = [];
+      [...highlightsByName[name]].sort((a, b) => b.text.length - a.text.length).forEach((h) => {
+        let from = 0;
+        let i;
+        while ((i = quote.indexOf(h.text, from)) !== -1) {
+          const end = i + h.text.length;
+          if (!taken.slice(i, end).some(Boolean)) {
+            for (let k = i; k < end; k++) taken[k] = true;
+            ranges.push({ start: i, end, sense: h.sense });
+          }
+          from = end;
+        }
+      });
+      return ranges.sort((a, b) => a.start - b.start);
+    }
+    let personPanelGeom = null; // { top, maxWidth, availH, cx } from layoutPersonPanel()
+    let personPanelScale = null; // lazily chosen per layout (needs the real fonts loaded)
+    const PANEL_SCALES = [1, 0.93, 0.86, 0.8, 0.74];
+    let linkPhotoSizeLast = 0; // set by layoutLinks(), read by layoutPersonPanel()
+
+    function measurePanelText(str, { family, size, weight = 400, style = 'normal' }) {
+      const el = svg.select('.personPanelMeasure');
+      el.style('font-family', family).style('font-size', `${size}px`).style('font-weight', weight).style('font-style', style).text(str);
+      return el.node().getComputedTextLength();
+    }
+
+    // Greedy word wrap for the quote, measured with the real font. Returns
+    // [start, end) character offsets into `str`, so tinted ranges map onto lines.
+    function wrapPanelWords(str, maxWidth, font) {
+      const lines = [];
+      let lineStart = null;
+      let lineEnd = 0;
+      for (const m of str.matchAll(/\S+/g)) {
+        if (lineStart == null) {
+          lineStart = m.index;
+        } else if (measurePanelText(str.slice(lineStart, m.index + m[0].length), font) > maxWidth) {
+          lines.push([lineStart, lineEnd]);
+          lineStart = m.index;
+        }
+        lineEnd = m.index + m[0].length;
+      }
+      if (lineStart != null) lines.push([lineStart, lineEnd]);
+      return lines;
+    }
+
+    // Everything the panel needs for one person at one font scale.
+    function panelContent(name, edgeKey, scale, maxWidth) {
+      const nameSize = Math.max(14, Math.round(typeScale.body * scale));
+      const bodySize = Math.max(11, Math.round(typeScale.caption * scale));
+      const lineH = bodySize * 1.4;
+      const bodyFont = { family: 'var(--font-body)', size: bodySize };
+
+      // Relationships packed onto as few lines as fit, whole ones only.
+      const rels = personRelationships(name).map((r) => ({ ...r, emph: r.edgeKey === edgeKey }));
+      const relLines = [];
+      let cur = [];
+      rels.forEach((r) => {
+        const test = [...cur, r].map((x) => x.text).join(' · ');
+        // Measured bold (the widest the hovered one can be) so it never overflows.
+        if (cur.length && measurePanelText(test, { ...bodyFont, weight: 700 }) > maxWidth) {
+          relLines.push(cur);
+          cur = [r];
+        } else {
+          cur.push(r);
+        }
+      });
+      if (cur.length) relLines.push(cur);
+
+      const quote = quoteByName[name] || '';
+      const quoteRanges = quoteHighlightRanges(name, quote);
+      const quoteLines = wrapPanelWords(quote, maxWidth, { ...bodyFont, style: 'italic' }).map(([start, end]) => {
+        // Split this line into plain / tinted pieces.
+        const pieces = [];
+        let pos = start;
+        quoteRanges.forEach((r) => {
+          const rs = Math.max(r.start, start);
+          const re = Math.min(r.end, end);
+          if (rs >= re) return;
+          if (rs > pos) pieces.push({ text: quote.slice(pos, rs) });
+          pieces.push({ text: quote.slice(rs, re), sense: r.sense });
+          pos = re;
+        });
+        if (pos < end) pieces.push({ text: quote.slice(pos, end) });
+        return pieces;
+      });
+
+      const nameH = nameSize * 1.25;
+      const height = nameH + 4 + relLines.length * lineH + 8 + quoteLines.length * lineH;
+      return { name, nameSize, bodySize, lineH, nameH, relLines, quoteLines, height };
+    }
+
+    // Biggest font scale at which the TALLEST panel (any of the 12) still
+    // fits in the free band, with padding below.
+    function choosePanelScale() {
+      const { maxWidth, availH } = personPanelGeom;
+      for (const sc of PANEL_SCALES) {
+        const tallest = Math.max(...famousQuotes.map((q) => panelContent(q.name, null, sc, maxWidth).height));
+        if (tallest <= availH) return sc;
+      }
+      return PANEL_SCALES[PANEL_SCALES.length - 1];
+    }
+
+    // Free band under the composition: below the bottom corner icons, the
+    // sight circle and the lowest link photo; above a bottom pad.
+    function layoutPersonPanel() {
+      if (!answer || !iconNodes) return;
+      const cornerBottoms = iconNodes.filter((d) => d.label !== 'sight').map((d) => d.sightY + iconBgRadius);
+      const photoBottoms = linkPhotoNodes.map((d) => d.endY + linkPhotoSizeLast * 0.75); // 0.75 > half-diagonal ratio, covers rotation
+      const compBottom = Math.max(sightCenterY + sightRadius, ...cornerBottoms, ...photoBottoms);
+      const bottomPad = spacing['2xl'];
+      const top = compBottom + spacing['2xl'];
+      personPanelGeom = {
+        cx: width / 2,
+        top,
+        maxWidth: Math.min(width - spacing['3xl'] * 2, 560),
+        availH: height - bottomPad - top
+      };
+      personPanelScale = null; // re-chosen on next hover
+    }
+
+    function showPersonPanel(d) {
+      if (!personPanelGeom) return;
+      if (personPanelScale == null) personPanelScale = choosePanelScale();
+      const { cx, top, maxWidth } = personPanelGeom;
+      const c = panelContent(d.name, d.edgeKey, personPanelScale, maxWidth);
+      const g = svg.select('.personPanel');
+
+      g.select('.personPanelName').attr('x', cx).attr('y', top).attr('font-size', c.nameSize).text(c.name);
+
+      let y = top + c.nameH + 4;
+      const relsG = g.select('.personPanelRels');
+      relsG.selectAll('*').remove();
+      c.relLines.forEach((line) => {
+        const t = relsG.append('text').attr('class', 'personPanelRel').attr('x', cx).attr('y', y).attr('font-size', c.bodySize);
+        line.forEach((seg, i) => {
+          if (i > 0) t.append('tspan').attr('class', 'personPanelSep').text(' · ');
+          // Each end of the hovered photo's own relationship is bold and
+          // tinted with its sense's colour; the person's other
+          // relationships are plain grey (Bryony).
+          const word = (label, key) =>
+            t
+              .append('tspan')
+              .style('fill', seg.emph ? panelSenseColor(key) : 'var(--grey)')
+              .style('font-weight', seg.emph ? 700 : null)
+              .text(label);
+          word(seg.fromLabel, seg.fromKey);
+          t.append('tspan').style('fill', seg.emph ? 'var(--text)' : 'var(--grey)').text(' → ');
+          word(seg.toLabel, seg.toKey);
+        });
+        y += c.lineH;
+      });
+
+      y += 8;
+      const quoteG = g.select('.personPanelQuote');
+      quoteG.selectAll('*').remove();
+      c.quoteLines.forEach((line) => {
+        const qt = quoteG.append('text').attr('class', 'personPanelQuoteLine').attr('x', cx).attr('y', y).attr('font-size', c.bodySize);
+        line.forEach((piece) => {
+          qt.append('tspan').style('fill', piece.sense ? panelSenseColor(piece.sense) : null).text(piece.text);
+        });
+        y += c.lineH;
+      });
+
+      g.style('opacity', 1);
+    }
+
+    function hidePersonPanel() {
+      svg.select('.personPanel').style('opacity', 0);
+    }
+
+    // Bryony: hovering a photo keeps that photo, its link and the link's
+    // source + target (circle + icon) as they are and dims everything else
+    // to 0.2 (the same dim the non-sight senses already use). Done with a
+    // class + CSS rather than inline opacity, so the scroll-driven opacity
+    // setters can't fight it and mouseout simply restores normal.
+    function highlightLink(d) {
+      const [from, to] = d.edgeKey.split('-');
+      svg.classed('linkHover', true);
+      svg.selectAll('.linkPhotoItem').classed('hl', (p) => p === d);
+      svg.selectAll('.linkArrow').classed('hl', (e) => e.from === from && e.to === to);
+      svg.selectAll('.senseIcon').classed('hl', (sIcon) => sIcon.label === from || sIcon.label === to);
+      svg.selectAll('.sightSubIcon').classed('hl', (sIcon) => sIcon.key === from || sIcon.key === to);
+    }
+
+    function clearLinkHighlight() {
+      svg.classed('linkHover', false);
+      svg.selectAll('.hl').classed('hl', false);
     }
 
     // Joins nodes onto .person groups; update never removes/rebuilds DOM.
@@ -761,7 +982,7 @@
 
     // Step9: 36 participant icons, join-once; labels set once (static text).
     function buildParticipantIcons() {
-      svg.select('.participantLabelLeft').text('18 letters + numbers → colour synesthetes');
+      svg.select('.participantLabelLeft').text('18 grapheme-colour synaesthetes');
       svg.select('.participantLabelRight').text('18 controls');
 
       const groups = svg
@@ -841,25 +1062,29 @@
       groups.select('.linkPhotoImage').attr('href', (d) => d.image);
       groups.select('.linkPhotoTile').attr('fill', (d, i) => `url(#link-photo-${i})`);
 
-      // Aggregates across all of this person's edges, not just this one.
+      // Bryony: name-job tooltip while the photos are still on their way
+      // (before this point of step5.move); once they've essentially landed,
+      // the panel under the diagram shows name, relationships and quote
+      // instead — grey-ing is per relationship, the hovered photo's own
+      // edge stays dark.
+      const panelReadyT = step5.move.start + 0.85 * (step5.move.end - step5.move.start);
       groups
         .on('mouseenter', function (event, d) {
-          // Name-job before the photos start flying to their link spot
-          // (step 6, 65%), name+relationships once that's under way.
-          if (sightT < 0.65) {
+          if (sightT < panelReadyT) {
             const idx = personIndexByName.get(d.name);
             const profession = idx != null ? people[idx].profession : '';
             showPersonTooltip(d.x, d.y, [{ text: `${d.name} - ${profession}`, bold: false }]);
           } else {
-            // Bryony: grey out this person's other relationships.
-            const lines = [
-              { text: d.name, bold: true },
-              ...personRelationships(d.name).map((r) => ({ text: r.text, bold: false, grey: r.edgeKey !== d.edgeKey }))
-            ];
-            showPersonTooltip(d.x, d.y, lines);
+            hidePersonTooltip();
+            showPersonPanel(d);
+            highlightLink(d);
           }
         })
-        .on('mouseleave', hidePersonTooltip);
+        .on('mouseleave', () => {
+          hidePersonTooltip();
+          hidePersonPanel();
+          clearLinkHighlight();
+        });
 
       return groups;
     }
@@ -1314,8 +1539,8 @@
       const labelFontSize = Math.max(18, Math.min(28, width * 0.036));
       const labelWrapWidth = Math.min(width - 48, labelFontSize * 24);
       // Bryony: 3-stage header text swap, resize-safe via persisted progress flags.
-      sightHeaderStage = linksRevealT >= 1 ? 'closing' : sightRevealT >= 1 ? 'famous' : 'split';
-      const sightHeaderTextFor = { split: sightSplitText, famous: sightFamousText, closing: closingHeaderText };
+      sightHeaderStage = sightRevealT >= 1 ? 'famous' : 'split';
+      const sightHeaderTextFor = { split: sightSplitText, famous: sightFamousText };
       sightLabelFontSize = labelFontSize;
       sightLabelWrapWidth = labelWrapWidth;
       const labelEl = svg
@@ -1326,20 +1551,6 @@
         .attr('y', topPadding + labelFontSize / 2);
       wrap(labelEl, labelWrapWidth, labelFontSize);
       const labelBox = labelEl.node().getBBox();
-
-      // Bryony: mobile-only hint, closing stage only — the photos become
-      // clickable right as this header appears, so point that out.
-      const hintFontSize = Math.max(11, labelFontSize * 0.6);
-      if (sightHeaderStage === 'closing' && width < breakpoints.mobile) {
-        svg
-          .select('.sightSubHint')
-          .text('(click photos for info)')
-          .attr('font-size', hintFontSize)
-          .attr('x', width / 2)
-          .attr('y', labelBox.y + labelBox.height + spacing.sm);
-      } else {
-        svg.select('.sightSubHint').text('');
-      }
 
       // Composition must fit the band between the caption and the tile cluster.
       const topBound = Math.max(senseRestY, labelBox.y + labelBox.height + spacing['2xl']);
@@ -1482,6 +1693,7 @@
       // circles moving up above to make room.
       const mobilePhotoScale = width < breakpoints.mobile ? 0.6 : width < breakpoints.tablet ? 0.7 : 1;
       const photoSize = TILE * step1.tilesToCorner.scale * mobilePhotoScale;
+      linkPhotoSizeLast = photoSize;
       const photoCorner = photoSize * 0.167; // same corner-radius ratio buildScene()'s tiles use (CORNER = TILE * 0.167)
       const pull = iconBgRadius + spacing.xs;
 
@@ -1794,7 +2006,7 @@
       const bottomReserve = (spacing['4xl'] + spacing['2xl']) * (isMobilePub ? 2.5 * (2 / 3) : 1);
       const chartBottom = height - edgeMargin - bottomReserve;
       const chartLeft = edgeMargin + spacing['2xl'];
-      const chartRight = width - edgeMargin - spacing['5xl']; // smaller right margin, per your note
+      const chartRight = width - edgeMargin - spacing['5xl'] - spacing.xl; // right margin: a tiny bit more (+16px)
 
       pubXScale = d3.scaleLinear().domain([publicationsMinYear, publicationsMaxYear]).range([chartLeft, chartRight]);
       pubYScale = d3.scaleLinear().domain(publicationsYDomain).range([chartBottom, chartTop]);
@@ -1833,29 +2045,19 @@
           .attr('y', (d) => pubYScale(d))
           .style('font-size', `${tickFontSize}px`); // closer to the axis, per your note
       }
-      if (isMobilePub) {
-        // Bryony: rotated alongside the axis didn't fit mobile — laid flat
-        // above the axis line instead, smaller, centred over it.
-        const yLabelFontSize = Math.max(9, tickFontSize * 0.7);
-        svg
-          .select('.pubYAxisLabel')
-          .attr('transform', null)
-          .attr('x', chartRight)
-          .attr('y', chartTop - spacing.sm)
-          .style('font-size', `${yLabelFontSize}px`)
-          .style('text-anchor', 'middle')
-          .style('dominant-baseline', 'auto');
-      } else {
-        // Label rotated 180° to read correctly now the axis moved sides.
-        const yLabelX = chartRight + spacing.md - 10; // a bit further left, per your note
-        const yLabelY = chartTop;
-        svg
-          .select('.pubYAxisLabel')
-          .attr('transform', `translate(${yLabelX},${yLabelY}) rotate(90)`)
-          .style('font-size', `${tickFontSize}px`)
-          .style('text-anchor', null)
-          .style('dominant-baseline', null);
-      }
+      // Bryony: not rotated, sitting above the y-axis, smaller so it can
+      // be text-anchor:middle — same treatment on every width now (this
+      // used to rotate 90deg on desktop only; the isMobilePub branch
+      // below was already doing what she wants everywhere).
+      const yLabelFontSize = Math.max(9, tickFontSize * 0.7);
+      svg
+        .select('.pubYAxisLabel')
+        .attr('transform', null)
+        .attr('x', chartRight)
+        .attr('y', chartTop - spacing.sm)
+        .style('font-size', `${yLabelFontSize}px`)
+        .style('text-anchor', 'middle')
+        .style('dominant-baseline', 'auto');
 
       // Bryony: 1892 marker line + labels rotated/aligned to mirror the y-axis label.
       const markerLabelGap = spacing.md;
@@ -1939,7 +2141,7 @@
       const subtitleWrapWidth = Math.min(width - 48, subtitleFontSize * 44);
       const subtitleEl = svg
         .select('.brainSubtitle')
-        .text('Rouw & Scholte (2007) · 18 grapheme-colour synesthetes vs 18 controls')
+        .text('Rouw & Scholte (2007) · 18 grapheme-colour synaesthetes vs 18 controls')
         .attr('font-size', subtitleFontSize)
         .attr('x', width / 2)
         .attr('y', titleBox.y + titleBox.height + spacing.lg + subtitleFontSize / 2);
@@ -2009,7 +2211,7 @@
       const participantScale = (Math.min(cellW, cellH) * 0.7) / 640;
 
       participantNodes.forEach((d) => {
-        const xOffset = d.group === 'synesthete' ? 0 : localHalfWidth;
+        const xOffset = d.group === 'synaesthete' ? 0 : localHalfWidth;
         const col = d.index % gridCols;
         const row = Math.floor(d.index / gridCols);
         d.x = xOffset + cellW * (col + 0.5);
@@ -2201,7 +2403,11 @@
       // Effect's own legendPad (measured from x=640 instead of x=0).
       const volumeLargeR = brainVolumeRadiusScale(100);
       const volumeSmallR = brainVolumeRadiusScale(44);
-      const volumeCenterX = 640 - legendPad - volumeLargeR;
+      // Bryony: whole Volume block (circles, title, annotation) nudged
+      // left 8 screen px — subtracted in local units so it comes out as
+      // exactly 8px after iconScale, same as everything derived from this.
+      const volumeShiftPx = 8;
+      const volumeCenterX = 640 - legendPad - volumeLargeR - volumeShiftPx / iconScale;
       const volumeCircleTopScreenY = effectValueScreenY;
       const volumeCircleBottomScreenY = volumeCircleTopScreenY + volumeLargeR * 2 * iconScale;
       const volumeBaselineY = (volumeCircleBottomScreenY - iconY) / iconScale; // back to local space
@@ -2251,12 +2457,14 @@
         .text('Size of the significant brain region (mm³)')
         .attr('x', toScreenX(350))
         .attr('y', volumeCaptionTop);
-      // Bryony: wider wrap for the Volume caption.
-      wrap(volumeCaptionEl, Math.min(220, 250 * iconScale), volumeCaptionFontSize);
+      // Bryony: wider wrap for the Volume caption — narrowed by the same
+      // 8px the Volume block above shifted left, so wrapped lines don't
+      // now run into it.
+      wrap(volumeCaptionEl, Math.min(220, 250 * iconScale) - volumeShiftPx, volumeCaptionFontSize);
     }
 
     // Step 10, just getting the beat on the page for now: a title
-    // ("When do synesthese connections form?") over Bryony's reference
+    // ("When do synaesthete connections form?") over Bryony's reference
     // photo — mirrors layoutBrain()'s own title layout above, then fits
     // the image, aspect-ratio-locked (1022x848, its real pixel size),
     // into the remaining space below it.
@@ -2265,7 +2473,7 @@
       const titleWrapWidth = Math.min(width - 48, titleFontSize * 30);
       const titleEl = svg
         .select('.connectionsTitle')
-        .text('When do synesthese connections form?')
+        .text('When do synaesthete connections form?')
         .attr('font-size', titleFontSize)
         .attr('x', width / 2)
         .attr('y', topPadding + titleFontSize / 2);
@@ -2276,7 +2484,7 @@
       const subtitleWrapWidth = Math.min(width - 48, subtitleFontSize * 44);
       const subtitleEl = svg
         .select('.connectionsSubtitle')
-        .text('Witthoft, Winawer & Eagleman (2015) · 6,588 synesthetes')
+        .text('Witthoft, Winawer & Eagleman (2015) · 6,588 synaesthetes')
         .attr('font-size', subtitleFontSize)
         .attr('x', width / 2)
         .attr('y', titleBox.y + titleBox.height + spacing.lg + subtitleFontSize / 2);
@@ -2412,7 +2620,11 @@
     // connections/heatmap scene has cleared — same layout approach as
     // layoutConnections()'s own title above.
     function layoutWhyICare() {
-      const fontSize = Math.max(22, Math.min(36, width * 0.04));
+      // Bryony: was out of sync with every other step's title (22-36/0.04
+      // instead of the 18-28/0.036 the comment above already claimed) —
+      // now actually matches layoutConnections()/layoutBrain()/etc, and
+      // "What about you?" below it (same clamp in App.svelte's CSS).
+      const fontSize = Math.max(18, Math.min(28, width * 0.036));
       const wrapWidth = Math.min(width - 48, fontSize * 20);
       const titleEl = svg
         .select('.whyICareTitle')
@@ -2524,7 +2736,7 @@
             d.falseRank = d.i;
           }
           d.rawColor = codeColor[d.code] || colors.grey;
-          d.sortedColor = d.isMatch ? magnetTemplateColorByLetter[letter] : colors.grey;
+          d.sortedColor = d.isMatch ? magnetTemplateColorByLetter[letter] : colors.backgroundTint; // Bryony: non-matches use the darker background tint (same as the side panels)
           d.filterRank = yobFilterRankByIndex[d.i];
           d.isSpotlight = d.i === spotlightUserIndex;
         });
@@ -2553,7 +2765,9 @@
       // now, not a flat guess — so the ring can grow as big as the band
       // allows with just a sliver of padding either side.
       const ringBandHeight = connectionsBandBottom - connectionsBandTop;
-      const ringLetterFontSize = Math.max(10, Math.min(16, magnetTrayLetterFontSize * 0.55));
+      // Bryony: ring letters at least twice as big, and sitting a bit
+      // closer in (ringLetterRadius below), per her screen-size-independent note.
+      const ringLetterFontSize = Math.max(20, Math.min(32, magnetTrayLetterFontSize * 1.1));
       const ringScale = ringLetterFontSize / magnetTrayLetterFontSize;
       const ringLabelMargin = ringLetterFontSize * 0.4 + 2; // a bit tighter again, per Bryony — slightly bigger ring
       const ringCx = connectionsBandCenterX;
@@ -2568,7 +2782,7 @@
       );
       const ringInnerRadius = ringOuterRadius * 0.32;
       const cellBandOuterRadius = ringOuterRadius * 0.86; // leaves room for the letter labels just outside it
-      const ringLetterRadius = ringOuterRadius * 0.97;
+      const ringLetterRadius = ringOuterRadius * 0.96; // Bryony: 0.94 still sat too close to the coloured ring, push right out to the edge of the available band
       heatmapCellBandOuterRadius = cellBandOuterRadius;
 
       // Every ring child (cells/separators/morph pieces) draws in LOCAL
@@ -2814,10 +3028,15 @@
       // Pure functions of t, so scrolling back up unwinds cleanly.
       const arriveT = phase(t, step5.arrive.fadeOut.start, step5.arrive.fadeOut.end);
       const revealT = phase(t, step5.reveal.fadeIn.start, step5.reveal.fadeIn.end);
-      // Famous synaesthetes fade in only after letter+numbers is fully shown.
-      const famousT = phase(t, step5.famousHeader.fadeIn.start, step5.famousHeader.fadeIn.end);
-      // Photos move into link positions once header is fully visible.
-      const moveT = phase(t, step5.famousHeader.fadeIn.end, 1);
+      // Bryony: nothing moves or changes opacity (people, other senses,
+      // sub-group labels) until the "grapheme" caption is past halfway —
+      // see step5.move in steps.js. Photos then fly into their link
+      // positions, while the other senses and the arrows fade in quickly
+      // (step5.linksFade, ~10% of the step) so they're already visible as
+      // the pictures travel.
+      const headerT = phase(t, step5.header.fadeIn.start, step5.header.fadeIn.end);
+      const moveT = phase(t, step5.move.start, step5.move.end);
+      const linksT = phase(t, step5.linksFade.start, step5.linksFade.end);
       if (linkPhotoGroups) {
         linkPhotoGroups.attr('transform', (d) => {
           d.x = lerp(d.startX, d.endX, moveT);
@@ -2842,7 +3061,7 @@
           const arrived = lerp(d.opacity, 1, arriveT);
           // Non-sight icons dim to 0.2 while sub-icons stagger in.
           if (d.label === 'sight') return arrived;
-          return lerp(lerp(arrived, 0.2, revealT), arrived, moveT);
+          return lerp(lerp(arrived, 0.2, revealT), arrived, linksT);
         });
         // Labels fade out with arriveT, reversible on scroll-back.
         senseGroups.select('.senseIconLabel').style('opacity', 1 - arriveT);
@@ -2870,14 +3089,14 @@
         });
       }
 
-      // Title swaps to famous-synaesthetes text once reveal completes.
+      // Relationship arrows now fade in here (was Step 7), with the photos.
+      svg.select('.linksGroup').style('opacity', linksT);
       svg.select('.linkPhotosGroup').style('opacity', revealT);
       sightRevealT = revealT;
 
-      // 'closing' stage owned by setLinksProgress; here resolves split/famous.
-      const displayStage = sightHeaderStage === 'closing' ? 'closing' : revealT >= 1 ? 'famous' : 'split';
-      svg.select('.sightLabel').style('opacity', displayStage === 'famous' ? famousT : revealT);
-      if (displayStage !== 'closing' && displayStage !== sightHeaderStage) {
+      const displayStage = revealT >= 1 ? 'famous' : 'split';
+      svg.select('.sightLabel').style('opacity', headerT);
+      if (displayStage !== sightHeaderStage) {
         sightHeaderStage = displayStage;
         const labelEl = svg
           .select('.sightLabel')
@@ -2893,38 +3112,9 @@
     function setLinksProgress(t) {
       if (!answer) return;
       const revealT = phase(t, step6.reveal.fadeIn.start, step6.reveal.fadeIn.end);
-      svg.select('.linksGroup').style('opacity', revealT);
-      // Photos handled in setSightProgress; this only does the arrows.
-      // Header swaps to "What are..." the moment photos start moving.
-      // Only re-wraps on the swap, not every tick — wrap() isn't free.
-      const nextStage = revealT > 0 ? 'closing' : sightRevealT >= 1 ? 'famous' : 'split';
-      if (nextStage !== sightHeaderStage) {
-        sightHeaderStage = nextStage;
-        const stageText = { split: sightSplitText, famous: sightFamousText, closing: closingHeaderText };
-        const labelEl = svg
-          .select('.sightLabel')
-          .text(stageText[sightHeaderStage])
-          .attr('font-size', sightLabelFontSize)
-          .attr('x', width / 2)
-          .attr('y', topPadding + sightLabelFontSize / 2);
-        wrap(labelEl, sightLabelWrapWidth, sightLabelFontSize);
-
-        // Bryony: mobile-only hint — the photos become clickable right as
-        // this header appears, so point that out.
-        if (sightHeaderStage === 'closing' && width < breakpoints.mobile) {
-          const labelBox = labelEl.node().getBBox();
-          svg
-            .select('.sightSubHint')
-            .text('(click photos for info)')
-            .attr('font-size', Math.max(11, sightLabelFontSize * 0.6))
-            .attr('x', width / 2)
-            .attr('y', labelBox.y + labelBox.height + spacing.sm);
-        } else {
-          svg.select('.sightSubHint').text('');
-        }
-      }
-      svg.select('.sightSubHint').style('opacity', sightHeaderStage === 'closing' && width < breakpoints.mobile ? revealT : 0);
-
+      // Photos AND arrows are handled in setSightProgress now, and the header
+      // stays "So what about our famous synaesthetes?" through this step
+      // (Bryony), so this only shrinks the linked tiles.
       // Same revealT shrinks the linked person's own tile (positionNodes()).
       linksRevealT = revealT;
       if (personGroups) positionNodes();
@@ -2938,6 +3128,11 @@
       // on .personGroup/.linkPhotoItem directly, since their own explicit
       // value beats the ancestor's.
       svg.select('.storyGroup').style('pointer-events', storyFadeT >= 1 ? 'none' : null);
+      if (storyFadeT > 0) {
+        // no mouseleave fires once pointer-events go off
+        hidePersonPanel();
+        clearLinkHighlight();
+      }
       svg.selectAll('.personGroup, .linkPhotoItem').style('pointer-events', storyFadeT >= 1 ? 'none' : null);
 
       const titleT = phase(t, step7.title.fadeIn.start, step7.title.fadeIn.end);
@@ -3025,7 +3220,18 @@
       svg.select('.brainDotLabelsGroup').style('opacity', dotsT);
     }
 
+    // "One participant matched" spotlight: expands in step 10, then holds
+    // through the start of step 11 and is released at step11.spotlightRelease.
+    function spotlightAmount() {
+      return (
+        phase(currentConnectionsProgress, step10.spotlight.expand.start, step10.spotlight.expand.end) *
+        (1 -
+          phase(currentHeatmapProgress, step11.spotlightRelease.start, step11.spotlightRelease.end))
+      );
+    }
+
     function setConnectionsProgress(t) {
+      currentConnectionsProgress = t;
       const chartFadeT = phase(t, step10.chartFadeOut.start, step10.chartFadeOut.end);
       svg.select('.brainGroup').style('opacity', 1 - chartFadeT);
 
@@ -3059,8 +3265,7 @@
         // caption comes in, then unfilter back to the full ring.
         const filterAmt = windPhase(t, step10.yobFilter.fadeIn, step10.yobFilter.fadeBack);
         // "One participant matched 25/26" caption's own spotlight pulse.
-        const spotlightAmt = windPhase(t, step10.spotlight.expand, step10.spotlight.shrink);
-        drawHeatmapCells(0, filterAmt, spotlightAmt);
+        drawHeatmapCells(0, filterAmt, spotlightAmount());
       }
     }
 
@@ -3080,7 +3285,7 @@
       // "Decades after exposure..." caption: ring settles into its
       // matched/unmatched clusters (the "2nd circle" state) and holds.
       const colorOrderAmt = phase(t, step11.colorOrderTrue.start, step11.colorOrderTrue.end);
-      drawHeatmapCells(colorOrderAmt);
+      drawHeatmapCells(colorOrderAmt, 0, spotlightAmount());
     }
 
     // Step 12: connections/heatmap scene clears as a whole (every child
@@ -3236,6 +3441,7 @@
       layoutQuotes();
       layoutSight();
       layoutLinks();
+      layoutPersonPanel();
       layoutPublications();
       layoutBrain();
       layoutConnections();
@@ -3407,9 +3613,14 @@
       <circle class="sightCircle"></circle>
       <g class="sightSubIconsGroup"></g>
       <text class="sightLabel"></text>
-      <text class="sightSubHint"></text>
       <g class="linksGroup"></g>
       <g class="linkPhotosGroup"></g>
+      <g class="personPanel">
+        <text class="personPanelMeasure"></text>
+        <text class="personPanelName"></text>
+        <g class="personPanelRels"></g>
+        <g class="personPanelQuote"></g>
+      </g>
     </g>
     <!-- Step 7: Line Area Chart - Publications -->
     <g class="publicationsGroup">
@@ -3713,15 +3924,6 @@
     fill: var(--text);
     text-anchor: middle;
     dominant-baseline: central;
-    opacity: 0;
-  }
-  :global(.chart-svg .sightSubHint) {
-    /* Mobile-only nudge toward the closing header, per Bryony. */
-    font-family: var(--font-body);
-    font-style: italic;
-    fill: var(--grey);
-    text-anchor: middle;
-    dominant-baseline: hanging;
     opacity: 0;
   }
   :global(.chart-svg .linksGroup) {
@@ -4103,6 +4305,51 @@
     text-anchor: middle;
     dominant-baseline: central;
     filter: drop-shadow(1px 2px 1.5px rgba(0, 0, 0, 0.28));
+  }
+  /* Link hover (Steps 6-7): everything but the hovered photo, its link and
+     that link's source + target is dimmed. !important so it beats the
+     scroll-driven inline opacities; removing .linkHover restores them. */
+  :global(.chart-svg svg.linkHover .senseIcon:not(.hl)),
+  :global(.chart-svg svg.linkHover .sightSubIcon:not(.hl)),
+  :global(.chart-svg svg.linkHover .linkArrow:not(.hl)),
+  :global(.chart-svg svg.linkHover .linkPhotoItem:not(.hl)) {
+    opacity: 0.2 !important;
+    transition: opacity 0.12s ease;
+  }
+  :global(.chart-svg .personPanel) {
+    /* Hover panel under the diagram (Steps 6-7); hidden until a photo is hovered. */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+  }
+  :global(.chart-svg .personPanelMeasure) {
+    visibility: hidden;
+  }
+  :global(.chart-svg .personPanelName) {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: hanging;
+  }
+  :global(.chart-svg .personPanelRel) {
+    font-family: var(--font-body);
+    fill: var(--greyDark);
+    text-anchor: middle;
+    dominant-baseline: hanging;
+  }
+  :global(.chart-svg .personPanelRelEmph) {
+    fill: var(--text);
+  }
+  :global(.chart-svg .personPanelSep) {
+    fill: var(--grey);
+  }
+  :global(.chart-svg .personPanelQuoteLine) {
+    font-family: var(--font-body);
+    font-style: italic;
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: hanging;
   }
   :global(.chart-svg .personTooltip) {
     /* Hidden until raised; pointer-events none so it can't trigger a mouseleave. */

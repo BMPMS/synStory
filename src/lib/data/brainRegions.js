@@ -1,4 +1,4 @@
-// The 4 brain regions for step9 ("Is synesthese brain activity
+// The 4 brain regions for step9 ("Is synaesthete brain activity
 // different?" — Rouw & Scholte 2007). Bryony's own research: real MNI
 // coordinates (x/y/z) are kept here for reference/future use, but the
 // scene currently only reads screenX/screenY (already researched,

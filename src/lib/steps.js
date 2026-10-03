@@ -97,18 +97,45 @@ export const step4 = {
   flashScale: 0.4
 };
 
-// Step 5: step4 fades except sense icons, which move onto a ring around sight.
+// Step 5 (shown as "Step 6"): step4 fades except sense icons, which move
+// onto a ring around sight; then 3 scrolling captions play over a held
+// scene (see .step--sight in global.css, and App.svelte for the captions).
+//
+// Bryony's flow: "SIGHT splits into 3 sub groups..." (sub-icons stagger
+// in) -> "grapheme is the academic term..." -> PAUSE, nothing moves or
+// changes opacity until that caption is more than half way -> photos fly
+// into place while the other senses + arrows fade in fast (~10% of the
+// step) -> "some of the famous synaesthetes have only one relationship...".
+//
+// The step is SIGHT_STEP_VH tall (global.css keeps the two in sync), so
+// every beat below is written in "vh scrolled into the step" and divided
+// by that height to get t. A caption whose CSS `top` is T vh sits at the
+// middle of the screen when 40 + T vh have been scrolled (scrollama
+// progress starts at the 90% trigger line), and a quarter of the way up
+// the screen (75vh) when 15 + T have been scrolled, which is how the
+// caption positions in global.css were chosen.
+export const SIGHT_STEP_VH = 240;
+const sightVh = (vh) => vh / SIGHT_STEP_VH;
 export const step5 = {
   arrive: {
-    fadeOut: { start: 0, end: 0.15 }
+    fadeOut: { start: 0, end: sightVh(15) }
   },
+  // Bryony: the header appears fast, over the first 5% of the step.
+  header: {
+    fadeIn: { start: 0, end: 0.05 }
+  },
+  // Sub-icons stagger in (and the beige circle fades in) only once caption 1
+  // is a quarter of the way up the screen: it is centred at 55vh scrolled,
+  // so that's 30vh. Caption 2 is centred at 135vh (captions are 80vh apart).
   reveal: {
-    fadeIn: { start: 0.2, end: 0.4 }
+    fadeIn: { start: sightVh(30), end: sightVh(75) }
   },
-  // Starts where reveal.fadeIn ends, so the header swap has no dead gap.
-  famousHeader: {
-    fadeIn: { start: 0.4, end: 0.6 }
-  }
+  // Held completely still from the end of the reveal until just past the
+  // middle of caption 2 (155vh), then the photos fly into place.
+  move: { start: sightVh(150), end: sightVh(225) },
+  // Other senses back to full opacity + relationship arrows fade in, over
+  // the first 10% of the step's progress once movement begins.
+  linksFade: { start: sightVh(150), end: sightVh(150) + 0.1 }
 };
 
 // Step 6: relationship arrows + photo fans fade in together.
@@ -125,22 +152,50 @@ export const step6 = {
 // then compressing the reveal into too NARROW a scroll window made it
 // easy to scroll straight past without ever seeing it animate — widened
 // so the draw alone takes a full screen's worth of scroll.
+// Bryony: "the line animation is far too long - cut that to 1/3 of the
+// time". The draw used to take 80vh of scroll (0.15 -> 0.35 of a 400vh
+// step); it's now ~27vh, and everything after it has slid earlier by the
+// 53vh saved (same dwell as before between beats). So the beats are written
+// in "vh scrolled into the step" and divided by the step's height, which
+// global.css (.step--captions-2) keeps in sync.
+export const PUB_STEP_VH = 307;
+const pubVh = (vh) => vh / PUB_STEP_VH;
 export const step7 = {
-  storyFadeOut: { start: 0, end: 0.04 },
-  title: { fadeIn: { start: 0.03, end: 0.08 } },
-  xAxis: { fadeIn: { start: 0.09, end: 0.13 } },
-  draw: { start: 0.15, end: 0.35 },
-  yAxis: { fadeIn: { start: 0.31, end: 0.35 } },
+  storyFadeOut: { start: 0, end: pubVh(16) },
+  title: { fadeIn: { start: pubVh(12), end: pubVh(32) } },
+  xAxis: { fadeIn: { start: pubVh(36), end: pubVh(52) } },
+  draw: { start: pubVh(60), end: pubVh(87) },
+  yAxis: { fadeIn: { start: pubVh(74), end: pubVh(87) } },
   // Bryony: markers now sync with this step's own captions (see
   // step--captions-2 in global.css) — 1892 as "The term" moves up near
   // 50%, 2007+2015 near 80%, settled well before the step ends.
-  marker: { fadeIn: { start: 0.48, end: 0.58 } },
-  citation1: { fadeIn: { start: 0.78, end: 0.86 } },
-  citation2: { fadeIn: { start: 0.84, end: 0.92 } }
+  marker: { fadeIn: { start: pubVh(139), end: pubVh(179) } },
+  citation1: { fadeIn: { start: pubVh(219), end: pubVh(251) } },
+  citation2: { fadeIn: { start: pubVh(243), end: pubVh(275) } }
 };
 
+// Bryony: captions inside one step are now a uniform 80vh apart. Steps 9 and
+// 10 were written as fractions of their OLD heights (300vh / 644vh), so the
+// fractions below are converted piecewise: each beat keeps its position
+// relative to the caption it was timed against. `anchors` pairs old and new
+// scrolled-vh positions (caption centres); in between it is linear.
+function remapVh(v, anchors) {
+  for (let i = 1; i < anchors.length; i++) {
+    const [o0, n0] = anchors[i - 1];
+    const [o1, n1] = anchors[i];
+    if (v <= o1) return n0 + ((v - o0) / (o1 - o0)) * (n1 - n0);
+  }
+  return v;
+}
+function retime(obj, oldH, newH, anchors) {
+  if (typeof obj === 'number') return remapVh(obj * oldH, anchors) / newH;
+  const out = {};
+  for (const k of Object.keys(obj)) out[k] = retime(obj[k], oldH, newH, anchors);
+  return out;
+}
+
 // Step 9: pub chart fades, then 36-icon intro, then brain scene, per Bryony.
-export const step9 = {
+const step9Old = {
   chartFadeOut: { start: 0, end: 0.08 },
   // Header carries 4 stages in order; brainSubtitle shares this fade-in.
   title: { fadeIn: { start: 0.04, end: 0.12 } },
@@ -165,7 +220,7 @@ export const step9 = {
 // hold; see step--captions-4 in global.css) purely to hold brain on
 // screen a bit longer; every beat below is the same sequence/pacing as
 // before, just slid later by that same 84vh.
-export const step10 = {
+const step10Old = {
   // Bug fix: brain used to stay fully opaque while this step's own title
   // and "Do you remember" caption were already fading in on top of it —
   // visible label overlap. Brain now clears fully, fast, once its extra
@@ -176,7 +231,13 @@ export const step10 = {
   title: { fadeIn: { start: 0.17, end: 0.26 } },
   // Bryony: "magnets section fades in too soon" — starts with the brain's
   // own fade-out (not during the title's), tray takes a bit longer.
-  tray: { fadeIn: { start: 0.304, end: 0.391 } },
+  // Bryony: "Step 10 24% -> 32% nothing happens, the magnet tray should
+  // start to appear ... as the Witthoft [title] is almost there" — now
+  // 145vh -> 201vh of the old 644vh step (24% -> 33% of the new one):
+  // starts the moment the brain has cleared (140vh) while the title is
+  // still finishing (109 -> 167vh), and is done before the first caption
+  // enters (~214vh).
+  tray: { fadeIn: { start: 145 / 644, end: 201 / 644 } },
   // Bryony: "as 'It found that' starts to scroll in, animate from the
   // letters to the first graph view (circular)" — the tray->ring move
   // used to be step 11's opening beat; runs here now instead, finishing
@@ -194,11 +255,32 @@ export const step10 = {
   // Bryony: "grey out the other participants and expand this
   // participant's circle of letters by 5x, then shrink again" — syncs
   // with the "25 out of 26" caption (step--captions-4 in global.css).
+  // Bryony: "the One participant matched highlight should persist till
+  // Step 11 10%" — so it no longer shrinks here; step11.spotlightRelease
+  // lets it go.
   spotlight: {
-    expand: { start: 0.87, end: 0.9 },
-    shrink: { start: 0.93, end: 0.96 }
+    expand: { start: 0.87, end: 0.9 }
   }
 };
+
+// Step 9: 300vh -> 260vh (captions at 100/180/260vh scrolled, were 100/200/300).
+export const step9 = retime(step9Old, 300, 260, [
+  [0, 0],
+  [100, 100],
+  [300, 260]
+]);
+
+// Step 10: 644vh -> 604vh (captions centred at 264/344/424/504/584vh scrolled,
+// were 264/324/384/524/624).
+export const step10 = retime(step10Old, 644, 604, [
+  [0, 0],
+  [264, 264],
+  [324, 344],
+  [384, 424],
+  [524, 504],
+  [624, 584],
+  [644, 604]
+]);
 
 // Step 11 (Bryony's "Step 12"): 26 letters shrink onto a ring, then
 // per-respondent cells sort by match — the "2nd circle" state the
@@ -209,7 +291,10 @@ export const step11 = {
   // starts — see step10's own trayToRing, which now drives the cells'
   // fade-in too, in sync with the letters landing on the ring.
   // Morphs cells from raw order into match-clustered order, then holds.
-  colorOrderTrue: { start: 0.42, end: 0.64 }
+  colorOrderTrue: { start: 0.42, end: 0.64 },
+  // The spotlighted respondent (step10's "One participant matched") holds
+  // until 10% of this step, then shrinks back to the ring.
+  spotlightRelease: { start: 0.1, end: 0.14 }
 };
 
 // Step 12 (Bryony's "Why do I care?"): the connections/heatmap scene

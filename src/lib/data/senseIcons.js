@@ -1,4 +1,4 @@
-// The 5 sense icons from the reference mockup ("What is SYNESTHESIA?"),
+// The 5 sense icons from the reference mockup ("What is SYNAESTHESIA?"),
 // in the order they appear there — taste, sound, sight, touch, smell —
 // matching the "Monochrome SVG N" id baked into each source file. Each
 // is a single monochrome path (their own background tile is dropped —

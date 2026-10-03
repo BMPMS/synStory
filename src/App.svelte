@@ -9,6 +9,8 @@
 
   let activeIndex = $state(0);
   let stepProgress = $state(0);
+  // Touch screens (no hover) are told to click instead of hover.
+  let touchOnly = $state(false);
 
   // Stays fully revealed once scrolled past, rather than snapping back.
   let revealProgress = $derived(activeIndex === 0 ? stepProgress : 1);
@@ -69,7 +71,7 @@
       { type: 'word', text: 'a' },
       { type: 'word', text: 'colleague' },
       { type: 'word', text: 'having' },
-      { type: 'word', text: 'a' },
+      { type: 'word', text: 'a', breakAfter: true },
       { type: 'icon', icon: whyICareIcons.eureka, caption: 'eureka moment' },
       { type: 'word', text: 'while' },
       { type: 'word', text: 'reading' },
@@ -98,23 +100,42 @@
       { type: 'word', text: 'she' },
       { type: 'word', text: 'took' },
       { type: 'word', text: 'the' },
-      { type: 'phrase', text: 'Synesthesia Battery Test.' }
+      { type: 'phrase', text: 'Synaesthesia Battery Test.' }
     ],
     [
       { type: 'word', text: 'She' },
       { type: 'word', text: 'was' },
       { type: 'word', text: 'a' },
       { type: 'word', text: 'confirmed' },
-      { type: 'phrase', text: 'letters + numbers → colour' },
-      { type: 'word', text: 'synesthete,' },
-      { type: 'italic', text: '(still is.)' }
+      { type: 'phrase', text: 'grapheme-colour' },
+      { type: 'word', text: 'synaesthete' },
+      { type: 'italic', text: '(still is).' }
     ]
   ];
+
+  // Bryony: this layout is the one she likes, so every line is fixed: each
+  // passage is split into explicit lines (a token with breakAfter ends a
+  // line), and a line never wraps. Instead the whole block is scaled down
+  // (whyICareScale, below) until its widest line fits the screen.
+  const whyICareLines = whyICareParagraphs.map((tokens) => {
+    const lines = [[]];
+    tokens.forEach((t) => {
+      lines[lines.length - 1].push(t);
+      if (t.breakAfter) lines.push([]);
+    });
+    return lines;
+  });
+  let whyICareScale = $state(1);
+  let whyICareOverlayEl;
+  let whyICareCtaEl;
 
   // Gaps between the 3 passages, measured/verified in the icon-rebus
   // prototype: tight below the "synaesthesia" line, ~1.5 lines of body
   // text above "When she was 7...".
-  const whyICareMarginTop = [0, 13, 42, 13];
+  // Bryony: slightly bigger gap above "When she was 7", and the SAME gap
+  // between the end of the passage and "What about you?".
+  const whyICareGap = 80;
+  const whyICareMarginTop = [0, 13, whyICareGap, 13];
 
   // Reveal pacing per token: reuses the old prototype's relative
   // "weight" per type (icon/phrase/rainbow linger longer than a plain
@@ -141,6 +162,11 @@
   });
 
   onMount(() => {
+    const noHover = window.matchMedia('(hover: none)');
+    touchOnly = noHover.matches;
+    const onNoHoverChange = (e) => (touchOnly = e.matches);
+    noHover.addEventListener('change', onNoHoverChange);
+
     const scroller = scrollama();
     scroller
       .setup({ step: '.step', offset: 0.9, progress: true })
@@ -153,12 +179,39 @@
         stepProgress = progress;
       });
 
+    // Scale the "Why do I care?" block so its widest line fits the width
+    // and the whole block (plus the CTA) fits the height. Everything in it
+    // is sized from --why-scale, so measured size / current scale = size
+    // at scale 1. Never above 1; floored so it stays legible.
+    function fitWhyICare() {
+      const overlay = whyICareOverlayEl;
+      const cta = whyICareCtaEl;
+      if (!overlay || !cta) return;
+      const s0 = whyICareScale || 1;
+      let naturalWidth = 0;
+      overlay.querySelectorAll('.whyICareLine').forEach((line) => {
+        naturalWidth = Math.max(naturalWidth, line.getBoundingClientRect().width / s0);
+      });
+      const naturalHeight = overlay.getBoundingClientRect().height / s0;
+      const availWidth = overlay.clientWidth;
+      const scene = overlay.offsetParent ? overlay.offsetParent.clientHeight : window.innerHeight;
+      const availHeight = scene - overlay.offsetTop - 48 - 24; // the CTA is inside the overlay now
+      if (!naturalWidth || !naturalHeight) return;
+      const next = Math.max(0.45, Math.min(1, availWidth / naturalWidth, availHeight / naturalHeight));
+      if (Math.abs(next - s0) > 0.002) whyICareScale = next;
+    }
+    fitWhyICare();
+    requestAnimationFrame(fitWhyICare);
+    document.fonts?.ready.then(fitWhyICare);
+
     function handleResize() {
       scroller.resize();
+      fitWhyICare();
     }
     window.addEventListener('resize', handleResize);
 
     return () => {
+      noHover.removeEventListener('change', onNoHoverChange);
       scroller.destroy();
       window.removeEventListener('resize', handleResize);
     };
@@ -199,10 +252,12 @@
            chart — it only ever changes opacity (via whyICareProgress),
            never position, and reveals/hides reversibly with scroll
            direction exactly like every other step's content. -->
-      <div class="whyICareOverlay">
-        {#each whyICareParagraphs as tokens, pi}
-          <p class="whyICarePassage" style="margin-top: {whyICareMarginTop[pi]}px">
-            {#each tokens as t}
+      <div class="whyICareOverlay" bind:this={whyICareOverlayEl} style="--why-scale: {whyICareScale}">
+        {#each whyICareLines as lines, pi}
+          <p class="whyICarePassage" style="margin-top: calc({whyICareMarginTop[pi]}px * var(--why-scale))">
+            {#each lines as line}
+            <span class="whyICareLine">
+            {#each line as t}
               {#if t.type === 'icon'}
                 <span
                   class="whyICareToken whyICareIconToken"
@@ -238,25 +293,27 @@
                 >{t.text}</span>
               {/if}
             {/each}
+            </span>
+            {/each}
           </p>
         {/each}
 
+        <!-- Bryony: "What about you?" doorway to the battery test — sits the
+             same distance (whyICareGap) below the end of the passage as
+             "When she was 7" sits below the rebus, so it follows the
+             passage rather than the bottom of the screen. Fades in once the
+             passage is essentially finished revealing (step12.cta). -->
+        <div
+          class="whyICareCta"
+          bind:this={whyICareCtaEl}
+          style="margin-top: calc({whyICareGap}px * var(--why-scale)); opacity: {phase(whyICareProgress, step12.cta.fadeIn.start, step12.cta.fadeIn.end)}"
+        >
+          <p class="whyICareCtaTitle">What about you?</p>
+          <p class="whyICareCtaBody">Take the <strong>Synaesthesia Battery Test</strong> and find out.</p>
+          <a class="whyICareCtaButton" href="/test.html">Start Test</a>
+        </div>
       </div>
 
-      <!-- Bryony: "What about you?" doorway to the battery test — pinned
-           to the bottom of the pinned scene (not the end of the passage
-           above, which varies in height) so it always lands in the same
-           spot, with breathing room below it, right where the page
-           un-pins into Credits. Fades in once the passage above is
-           essentially finished revealing (step12.cta). -->
-      <div
-        class="whyICareCta"
-        style="opacity: {phase(whyICareProgress, step12.cta.fadeIn.start, step12.cta.fadeIn.end)}"
-      >
-        <p class="whyICareCtaTitle">What about you?</p>
-        <p class="whyICareCtaBody">Take the <strong>Synesthesia Battery Test</strong> and find out.</p>
-        <a class="whyICareCtaButton" href="/test.html">Start Test</a>
-      </div>
     </main>
   </div>
 
@@ -267,26 +324,42 @@
   <div class="step"></div>
   <div class="step"></div>
   <div class="step"></div>
-  <div class="step"></div>
-  <div class="step"></div>
+  <!-- Step 6: "So what about our famous synaesthetes?" — captions scroll
+       over a held scene (beats in step5 of steps.js, heights in
+       .step--sight in global.css). -->
+  <div class="step step--sight">
+    <p class="stepText"><strong>Sight</strong> splits into 3 sub groups: <strong>colour</strong>, <strong>grapheme</strong>, <strong>shapes&nbsp;+&nbsp;objects</strong></p>
+    <p class="stepText"><strong>Grapheme</strong> is the academic term for <strong>letters</strong>, <strong>numbers</strong>, <strong>symbols</strong> or <strong>words</strong></p>
+    <p class="stepText">Some of our <strong>famous synaesthetes</strong> have only one relationship, others have several.</p>
+  </div>
+  <!-- Step 7: header swaps to "What are their sense → sense triggers?"; one
+       caption tells people how to explore (wording follows the device —
+       see touchOnly in <script>). Taller than a plain step so there's
+       scroll left to hover around after the caption has passed. -->
+  <div class="step step--hover">
+    <p class="stepText">
+      <strong>{touchOnly ? 'Click' : 'Hover'}</strong> {touchOnly ? 'on' : 'over'} the pictures to find out more.
+      <span class="stepNote">There is not a quote for every sense → sense relationship</span>
+    </p>
+  </div>
   <div class="step step--captions-2">
-    <p class="stepText">The term SYNAESTHESIA was first used in 1892</p>
-    <p class="stepText">Let's focus on two recent publications</p>
+    <p class="stepText">The <strong>publication history</strong> goes back over 200 years.<br /><br />The term <strong>synaesthesia</strong> was first used in 1892.</p>
+    <p class="stepText">While <strong>sound → colour</strong> is the most popular relationship amongst our famous synaesthetes, <strong>grapheme → colour</strong> is the most documented and studied relationship.<br /><br />Let's focus on <strong>two recent publications</strong>.</p>
   </div>
   <div class="step step--captions-3">
-    <p class="stepText">The study had 36 participants.<br /><br />50% <strong>letters+numbers</strong> → <strong>colour</strong> synesthetes<br />50% <strong>controls</strong></p>
-    <p class="stepText">They were shown <strong>letters, numbers and symbols</strong> while undergoing <strong>fMRI</strong> scanning.</p>
-    <p class="stepText">Synesthetes showed <strong>greater</strong> and <strong>more widespread</strong> brain activation in some interesting areas.</p>
+    <p class="stepText">The study had 36 participants.<br /><br />50% <strong>grapheme-colour</strong> synaesthetes<br />50% <strong>controls</strong></p>
+    <p class="stepText">They were shown letters, numbers and symbols while undergoing <strong>fMRI</strong> scanning.</p>
+    <p class="stepText">Synaesthetes showed <strong>greater</strong> and <strong>more widespread</strong> brain activation in some interesting areas.</p>
   </div>
   <div class="step step--captions-4">
     <p class="stepText">Do you remember these <strong>Fisher Price Fridge Magnets</strong>? They were very popular in the US in the 80s and 90s.</p>
-    <p class="stepText">This study worked with <strong>6,588 US residents</strong> who were proven <strong>letters + numbers → colour</strong> synesthetes.</p>
-    <p class="stepText">It found that 6% (396) had <strong>letters + numbers → colour</strong> pairings matching the <strong>Fisher Price Fridge Magnets</strong>.</p>
-    <p class="stepText">This association gets even stronger for participants born in the peak popularity period (1975 to 1980).</p>
+    <p class="stepText">This study worked with <strong>6,588 US residents</strong> who were proven <strong>grapheme-colour</strong> synaesthetes.</p>
+    <p class="stepText">It found that 6% had <strong>grapheme-colour</strong> pairings matching at least 10 of the <strong>Fisher Price Fridge Magnets</strong>.</p>
+    <p class="stepText">This association gets even stronger for participants born in the <strong>peak popularity</strong> period (<strong>1975 to 1980</strong>).</p>
     <p class="stepText">One participant matched 25 out of 26 letters.</p>
   </div>
   <div class="step">
-    <p class="stepText">Decades after exposure, this group still associate letters with these colours learnt in childhood.</p>
+    <p class="stepText">The evidence suggests that some synaesthetes develop and consolidate their <strong>grapheme → colour</strong> associations in <strong>early childhood</strong>.<br /><br />There was another study using different stimuli in 2019 <span class="stepAside">(Root, Dobkins, Ramachandran, Rouw)</span> which confirmed this theory further.</p>
   </div>
   <!-- Step 12: "Why do I care?" — see whyICareProgress in <script> and
        the overlay inside <main> above. Plain empty step, same as the 7
@@ -332,30 +405,42 @@
      independent layout gap rather than a shared row-gap floor. */
   .whyICarePassage {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: center;
+    row-gap: calc(8px * var(--why-scale, 1));
+    margin: 0;
+    /* Everything below is sized from --why-scale (set from JS in App's
+       fitWhyICare), so the block shrinks as one on narrow screens. */
+    font-size: calc(var(--text-body, 19px) * var(--why-scale, 1));
+  }
+  /* A line never wraps (Bryony's fixed layout); it is as wide as its own
+     content, and the scale above is what makes that fit the screen. */
+  .whyICareLine {
+    display: flex;
+    flex-wrap: nowrap;
     align-items: center;
     justify-content: center;
-    row-gap: 8px;
     column-gap: 0.4em;
-    margin: 0;
+    width: max-content;
+    white-space: nowrap;
   }
 
   .whyICareToken {
     font-family: var(--font-body);
   }
   .whyICareWord {
-    font-size: var(--text-body, 19px);
+    font-size: 1em;
     line-height: 1.3;
     color: var(--text);
   }
   .whyICareItalic {
-    font-size: var(--text-body, 19px);
+    font-size: 1em;
     line-height: 1.3;
     font-style: italic;
     color: var(--text);
   }
   .whyICarePhrase {
-    font-size: var(--text-body, 19px);
+    font-size: 1em;
     font-weight: 700;
     line-height: 1.3;
     color: var(--text);
@@ -366,22 +451,22 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
+    gap: calc(2px * var(--why-scale, 1));
     margin: 0 0.15em;
     /* Visual-only nudge: `position: relative` shifts the rendered box
        without adding to its layout footprint, so it can't inflate the
        row-gap the way a margin would. */
     position: relative;
-    top: 7px;
+    top: calc(7px * var(--why-scale, 1));
   }
   .whyICareIconGlyph {
-    width: 44px;
-    height: 44px;
+    width: calc(44px * var(--why-scale, 1));
+    height: calc(44px * var(--why-scale, 1));
     color: var(--purple);
   }
   .whyICareIconCaption {
     font-family: var(--font-heading);
-    font-size: 11px;
+    font-size: calc(11px * var(--why-scale, 1));
     font-weight: 500;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -396,7 +481,8 @@
     display: inline-block;
     font-family: var(--font-heading);
     font-weight: 600;
-    font-size: var(--text-h3, 30px);
+    /* Bryony: same size as the rest of the passage ("When she was 7"). */
+    font-size: 1em;
     line-height: 1;
   }
   .whyICareLetter {
@@ -408,16 +494,9 @@
     font-weight: 400;
   }
 
-  /* "What about you?" doorway — anchored to the bottom of the pinned
-     scene (main fills .pinned's 100vh) with its own padding, rather than
-     flowing below the passage above, so it always lands in the same
-     place regardless of how tall the passage renders. */
+  /* "What about you?" doorway — flows straight after the passage (it is
+     inside .whyICareOverlay), spaced by the same gap as "When she was 7". */
   .whyICareCta {
-    position: absolute;
-    left: 50%;
-    bottom: 48px;
-    transform: translateX(-50%);
-    width: calc(100% - 48px);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -427,13 +506,18 @@
   .whyICareCtaTitle {
     font-family: var(--font-heading);
     font-weight: 600;
-    font-size: var(--text-h3, 30px);
+    /* Bryony: match the main chart's own responsive section-title size
+       (Math.max(18, Math.min(28, width*0.036)) in ChartSvg.svelte) rather
+       than a fixed --text-h3. */
+    font-size: clamp(18px, 3.6vw, 28px);
     margin: 0;
     color: var(--text);
   }
   .whyICareCtaBody {
     font-family: var(--font-body);
-    font-size: var(--text-body, 19px);
+    /* Bryony: same size as the passage text above ("When she was 7"),
+       so it shrinks with it on small screens. */
+    font-size: calc(var(--text-body, 19px) * var(--why-scale, 1));
     line-height: 1.5;
     margin: 0;
     color: var(--text);

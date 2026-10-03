@@ -121,12 +121,12 @@ export function scoreConsistency(responsesByGrapheme) {
 // approximate read on the score for an engaging result screen, not a
 // clinical cutoff. Real batteries validate their own thresholds against
 // a studied population; this one hasn't been, and says so on screen.
-// "grapheme-colour" is the field's term for it; "letters + numbers ->
-// colour" is the plain-English version used everywhere user-facing (and
-// bolded wherever it's rendered as HTML) — split into detailBefore/
+// "grapheme-colour" is the field's term for it, now used everywhere
+// user-facing too (was the plainer "letters + numbers -> colour") — and
+// bolded wherever it's rendered as HTML — split into detailBefore/
 // detailBold/detailAfter so the results screen can bold it with a real
 // <strong>, not string interpolation.
-const LETTERS_NUMBERS_COLOUR = 'letters + numbers → colour';
+const GRAPHEME_COLOUR = 'grapheme-colour';
 
 export function describeConsistency(overallScore) {
   if (overallScore < 8) {
@@ -134,7 +134,7 @@ export function describeConsistency(overallScore) {
       label: 'Highly consistent',
       detailBefore:
         'Your colour choices for the same letter or number stayed remarkably close across all three rounds — the kind of result many people with ',
-      detailBold: LETTERS_NUMBERS_COLOUR,
+      detailBold: GRAPHEME_COLOUR,
       detailAfter: ' synaesthesia show.'
     };
   }
@@ -143,7 +143,7 @@ export function describeConsistency(overallScore) {
       label: 'Fairly consistent',
       detailBefore:
         'Your colour choices were noticeably steadier than chance across the three rounds — somewhat more consistent than most people without ',
-      detailBold: LETTERS_NUMBERS_COLOUR,
+      detailBold: GRAPHEME_COLOUR,
       detailAfter: ' synaesthesia tend to be.'
     };
   }
@@ -153,5 +153,146 @@ export function describeConsistency(overallScore) {
       'Your colour choices varied a fair bit across the three rounds — the typical pattern for people who don’t experience letters or numbers as having an inherent colour.',
     detailBold: null,
     detailAfter: ''
+  };
+}
+
+// --- Speed congruency test ---------------------------------------------
+// Second half of the battery, after the colour test above. Each of the 36
+// graphemes is shown once, with SPEED_OPTIONS colour swatches underneath;
+// the subject taps the colour THEY picked for it earlier, as fast as they
+// can. The correct swatch is that person's own colour for the grapheme (so
+// there's no fixed palette to be wrong about); the other swatches are
+// their own colours for other graphemes. Someone whose colours are
+// automatic and stable tends to be both quick and accurate; someone who
+// was guessing in the colour test has to remember, so is slower and gets
+// more wrong.
+export const SPEED_OPTIONS = 6;
+// Two swatches closer than this (CIE76 ∆E) look the same, so tapping
+// either counts as correct.
+const SAME_COLOUR_DISTANCE = 6;
+
+function shuffled(arr, random) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// A grapheme's "own" colour: whichever of its picks sits closest to the
+// others (the medoid), so it's always a colour the person really chose.
+export function ownColourFor(colors) {
+  if (!colors || !colors.length) return '#888888';
+  const labs = colors.map(hexToLab);
+  let best = 0;
+  let bestSum = Infinity;
+  labs.forEach((lab, i) => {
+    const sum = labs.reduce((acc, other) => acc + labDistance(lab, other), 0);
+    if (sum < bestSum) {
+      bestSum = sum;
+      best = i;
+    }
+  });
+  return colors[best];
+}
+
+// responsesByGrapheme: same shape as scoreConsistency's input.
+// Returns [{ grapheme, options: [hex x SPEED_OPTIONS], correctIndex }].
+export function buildSpeedTrials(responsesByGrapheme, random = Math.random) {
+  const own = {};
+  GRAPHEMES.forEach((g) => {
+    own[g] = ownColourFor(responsesByGrapheme[g]);
+  });
+  const labs = {};
+  GRAPHEMES.forEach((g) => {
+    labs[g] = hexToLab(own[g]);
+  });
+
+  return shuffled(GRAPHEMES, random).map((grapheme) => {
+    const target = labs[grapheme];
+    const candidates = shuffled(
+      othersThan(grapheme),
+      random
+    );
+    // Prefer distractors that are clearly different from the answer and
+    // from each other; relax if this person's colours are all similar.
+    const chosen = [];
+    for (const [minFromTarget, minFromEachOther] of [
+      [14, 8],
+      [8, 4],
+      [0, 0]
+    ]) {
+      for (const g of candidates) {
+        if (chosen.length >= SPEED_OPTIONS - 1) break;
+        if (chosen.includes(g)) continue;
+        if (labDistance(labs[g], target) < minFromTarget) continue;
+        if (chosen.some((c) => labDistance(labs[c], labs[g]) < minFromEachOther)) continue;
+        chosen.push(g);
+      }
+    }
+    const options = shuffled([own[grapheme], ...chosen.map((g) => own[g])], random);
+    return { grapheme, options, correctIndex: options.indexOf(own[grapheme]) };
+  });
+}
+
+function othersThan(grapheme) {
+  return GRAPHEMES.filter((g) => g !== grapheme);
+}
+
+export function isSpeedAnswerCorrect(trial, clickedIndex) {
+  if (clickedIndex === trial.correctIndex) return true;
+  const answer = hexToLab(trial.options[trial.correctIndex]);
+  return labDistance(hexToLab(trial.options[clickedIndex]), answer) < SAME_COLOUR_DISTANCE;
+}
+
+function median(nums) {
+  if (!nums.length) return null;
+  const s = nums.slice().sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+// answers: [{ grapheme, correct, rt }] with rt in milliseconds.
+export function scoreSpeed(answers) {
+  const correctRts = answers.filter((a) => a.correct).map((a) => a.rt);
+  return {
+    total: answers.length,
+    correctCount: answers.filter((a) => a.correct).length,
+    accuracy: answers.length ? answers.filter((a) => a.correct).length / answers.length : 0,
+    medianMs: median(correctRts)
+  };
+}
+
+// Informal, like describeConsistency — chance here is 1 in SPEED_OPTIONS
+// (about 17% correct), and these bands haven't been validated against a
+// studied population.
+export function describeSpeed({ accuracy, medianMs }) {
+  const seconds = medianMs == null ? null : medianMs / 1000;
+  if (accuracy >= 0.85 && seconds != null && seconds < 2.5) {
+    return {
+      label: 'Quick and accurate',
+      detail:
+        'You found your own colour for almost every letter and number, and fast — the pattern researchers expect when the colours really are automatic.'
+    };
+  }
+  if (accuracy >= 0.85) {
+    return {
+      label: 'Accurate, but deliberate',
+      detail:
+        'You found your own colours almost every time, but took a moment to think. Plenty of people who remember their choices do the same.'
+    };
+  }
+  if (accuracy >= 0.5) {
+    return {
+      label: 'Mixed',
+      detail:
+        'You remembered a good share of your colours, but not all of them — somewhere between guessing and knowing.'
+    };
+  }
+  return {
+    label: 'Hard to recall',
+    detail:
+      'Your own colours were hard to pick back out. That is the typical pattern when the colours were guesses rather than something automatic.'
   };
 }

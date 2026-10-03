@@ -5,6 +5,7 @@
   // intro, then the two charts, then the photo/attribution credits last.
   import { people } from '../data/people.js';
   import { photoCredits } from '../data/photoCredits.js';
+  import { famousQuotes } from '../data/famousQuotes.js';
   import Contributions from './Contributions.svelte';
   import DevTimeStream from './DevTimeStream.svelte';
 
@@ -14,13 +15,12 @@
 <footer class="credits">
   <section class="creditsIntro">
     <p>
-      This story was an experiment working in collaboration with AI agents
-      sticking to 3 fundamental rules.
+      This project was an <em>AI Collaboration Experiment</em> working with 3 rules
     </p>
     <div class="creditsRules">
-      <p>FOLLOW a traditional project management flow</p>
+      <p><strong>FOLLOW</strong> a traditional project management flow</p>
       <p><strong>DON'T</strong> write a line of code</p>
-      <p><strong>DO</strong> everything else (with targeted AI when appropriate)</p>
+      <p><strong>DO</strong> everything else <em>(with targeted AI when appropriate)</em></p>
     </div>
   </section>
 
@@ -31,8 +31,8 @@
     </div>
   </section>
 
-  <section class="creditsBlock">
-    <h3 class="creditsSubheading creditsSubheading--plain">Time spent</h3>
+  <section class="creditsBlock creditsBlock--spaced">
+    <h3 class="creditsSubheading">Time spent</h3>
     <div class="creditsChart">
       <DevTimeStream />
     </div>
@@ -53,9 +53,14 @@
         <a href="https://www.thesynesthesiatree.com/2021/03/olfactory-visual-synesthesia.html?utm_source=chatgpt.com" target="_blank" rel="noopener">5</a>
       </li>
       <li>
+        <strong>Famous Synaesthete Quotes:</strong>
+        {#each famousQuotes as q, i (q.name)}<a href={q.source.url} target="_blank" rel="noopener" title="{q.name} — {q.source.label}">{q.initials}</a>{i < famousQuotes.length - 1 ? ', ' : ''}{/each}
+      </li>
+      <li>
         <strong>Publications:</strong>
         Rouw &amp; Scholte (<a href="https://www.nature.com/articles/nn1906?utm_source=chatgpt.com" target="_blank" rel="noopener">link</a>),
-        Witthoft, Winawer &amp; Eagleman (<a href="https://journals.plos.org/plosone/article?id=10.1371%2Fjournal.pone.0118996&utm_source=chatgpt.com" target="_blank" rel="noopener">link</a>)
+        Witthoft, Winawer &amp; Eagleman (<a href="https://journals.plos.org/plosone/article?id=10.1371%2Fjournal.pone.0118996&utm_source=chatgpt.com" target="_blank" rel="noopener">link</a>),
+        Root, Dobkins, Ramachandran &amp; Rouw (<a href="https://pubmed.ncbi.nlm.nih.gov/31630649/" target="_blank" rel="noopener">link</a>)
       </li>
     </ul>
   </section>
@@ -64,12 +69,21 @@
 <style>
   .credits {
     background: var(--background, #f7f3ec);
-    padding: 64px 24px;
+    padding: 40px 24px 64px;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 24px;
     text-align: center;
+  }
+  /* Bryony: a very subtle divider between the Start Test button above and
+     "This project was an AI Collaboration Experiment". (Top padding is
+     40px + this 1px line + the 24px gap, so the text sits where it did.) */
+  .credits::before {
+    content: '';
+    width: min(480px, 100%);
+    height: 1px;
+    background: rgba(182, 182, 179, 0.45);
   }
   .creditsBlock {
     display: flex;
@@ -77,17 +91,20 @@
     gap: 16px;
     max-width: 760px;
   }
+  .creditsBlock--spaced {
+    /* Bryony: "2 line spaces above Time spent" — added on top of
+       .credits' own 24px section gap (~28px per line). */
+    margin-top: 32px;
+  }
   .creditsSubheading {
     font-family: var(--font-heading);
     font-weight: 600;
-    /* Bryony: match the "What about you?" title's size exactly
-       (.whyICareCtaTitle, var(--text-h3)) rather than --text-lead. */
-    font-size: var(--text-h3, 30px);
+    /* Bryony: match the main chart's own responsive section-title size
+       (Math.max(18, Math.min(28, width*0.036)) in ChartSvg.svelte, same
+       as .whyICareCtaTitle) rather than a fixed --text-h3. */
+    font-size: clamp(18px, 3.6vw, 28px);
     margin: 0 0 8px;
     color: var(--text);
-  }
-  .creditsSubheading--plain {
-    font-size: var(--text-body, 19px);
   }
   .creditsIntro {
     display: flex;
@@ -104,7 +121,11 @@
     margin: 0;
   }
   .creditsRules {
-    margin: 0;
+    /* Bryony: "line space above FOLLOW" / "three line spaces below DO" —
+       added on top of .creditsIntro's own 12px gap above and .credits'
+       own 24px section gap below; ~28px is one body line-height
+       (19px * 1.5). */
+    margin: 16px 0 60px;
     display: flex;
     flex-direction: column;
     align-items: center;

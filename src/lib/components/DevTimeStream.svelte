@@ -11,9 +11,19 @@
 
   let svgEl;
 
+  // Bryony: "I think I might remove this bit" (Total 38h over 8 days / tokens /
+  // nominal cost). Hidden for now; flip to true to bring it back.
+  const SHOW_STATS = false;
+  // Bryony: smooth the curve by skipping the "step" on these days — the
+  // stream is drawn through the other days only (Day 2, Day 5 and Day 6
+  // here = indices 1, 4 and 5). Guide lines/labels/thumbnails stay on every day.
+  const SKIP_IN_CURVE = new Set([1, 4, 5]);
+  // Bryony: the y scale is 10 hours wide, so the widest day has padding.
+  const Y_SCALE_MINUTES = 10 * 60;
+
   $effect(() => {
     const width = 760; // matches .creditsChart's max-width so text renders ~1:1, not shrunk by viewBox scaling
-    const margin = { top: 34, right: 35, bottom: 250, left: 96 }; // +28 vs before: CONTENT_SIZE's taller line-height needs more room below the thumbnails
+    const margin = { top: 34, right: 35, bottom: SHOW_STATS ? 250 : 130, left: 96 }; // +28 vs before: CONTENT_SIZE's taller line-height needs more room below the thumbnails
     const plotHeight = 188;
     const height = margin.top + plotHeight + margin.bottom;
     const plotTop = margin.top;
@@ -35,11 +45,12 @@
 
     const xScale = d3.scalePoint().domain(d3.range(stages.length)).range([xStart, xEnd]).padding(0);
     const maxDuration = d3.max(stages, (d) => d.duration);
-    const yScale = d3.scaleLinear().domain([0, maxDuration]).range([0, plotHeight]);
+    const yScale = d3.scaleLinear().domain([0, Y_SCALE_MINUTES]).range([0, plotHeight]);
+    const curveStages = stages.map((d, i) => ({ ...d, i })).filter((d) => !SKIP_IN_CURVE.has(d.i));
 
     const area = d3
       .area()
-      .x((d, i) => xScale(i))
+      .x((d) => xScale(d.i))
       .y0((d) => centerY + yScale(d.duration) / 2)
       .y1((d) => centerY - yScale(d.duration) / 2)
       .curve(d3.curveMonotoneX);
@@ -79,7 +90,7 @@
     // The stream itself (drawn after guide lines so it covers their middle).
     svg
       .append('path')
-      .datum(stages)
+      .datum(curveStages)
       .attr('d', area)
       .attr('fill', colors.purple)
       .attr('fill-opacity', 0.88);
@@ -99,8 +110,9 @@
     // Y-axis: single full-height line, arrows both ends, labelled with the
     // longest day's own duration (rounded down).
     const axisX = margin.left - 42;
-    const axisPad = 14;
-    const axisTop = plotTop + axisPad, axisBottom = plotBottom - axisPad;
+    // Bryony: the arrows reach the top and bottom of the widest section
+    // (a little more than the "8h" label says).
+    const axisTop = centerY - yScale(maxDuration) / 2, axisBottom = centerY + yScale(maxDuration) / 2;
     svg
       .append('line')
       .attr('x1', axisX).attr('x2', axisX)
@@ -125,24 +137,26 @@
       .attr('fill', colors.grey)
       .text(`${Math.floor(maxDuration / 60)}h`);
 
-    // Total + token/cost stat block, bottom-right — sits below the
-    // thumbnail row with a line-height's worth of breathing room.
-    const totalMinutes = stages.reduce((sum, d) => sum + d.duration, 0);
-    const thumbBottom = plotBottom + 14 + THUMB_SIZE;
-    const statY = thumbBottom + 48 + 14;
-    const stat = svg.append('g').attr('transform', `translate(${width - margin.right},${statY})`);
-    const line1 = stat.append('text').attr('text-anchor', 'end').attr('font-family', fonts.body);
-    line1.append('tspan').attr('fill', colors.grey).attr('font-size', CONTENT_SIZE).text('Total ');
-    line1.append('tspan').attr('fill', colors.text).attr('font-weight', 700).attr('font-size', CONTENT_SIZE).text(`${Math.round(totalMinutes / 60)}h `);
-    line1.append('tspan').attr('fill', colors.grey).attr('font-size', CONTENT_SIZE).text('over ');
-    line1.append('tspan').attr('fill', colors.text).attr('font-weight', 700).attr('font-size', CONTENT_SIZE).text(`${stages.length} days`);
+    if (SHOW_STATS) {
+      // Total + token/cost stat block, bottom-right — sits below the
+      // thumbnail row with a line-height's worth of breathing room.
+      const totalMinutes = stages.reduce((sum, d) => sum + d.duration, 0);
+      const thumbBottom = plotBottom + 14 + THUMB_SIZE;
+      const statY = thumbBottom + 48 + 14;
+      const stat = svg.append('g').attr('transform', `translate(${width - margin.right},${statY})`);
+      const line1 = stat.append('text').attr('text-anchor', 'end').attr('font-family', fonts.body);
+      line1.append('tspan').attr('fill', colors.grey).attr('font-size', CONTENT_SIZE).text('Total ');
+      line1.append('tspan').attr('fill', colors.text).attr('font-weight', 700).attr('font-size', CONTENT_SIZE).text(`${Math.round(totalMinutes / 60)}h `);
+      line1.append('tspan').attr('fill', colors.grey).attr('font-size', CONTENT_SIZE).text('over ');
+      line1.append('tspan').attr('fill', colors.text).attr('font-weight', 700).attr('font-size', CONTENT_SIZE).text(`${stages.length} days`);
 
-    const line2 = stat.append('text').attr('y', 24).attr('text-anchor', 'end').attr('font-family', fonts.body);
-    line2.append('tspan').attr('fill', colors.text).attr('font-weight', 700).attr('font-size', CONTENT_SIZE).text('26.5 million tokens');
+      const line2 = stat.append('text').attr('y', 24).attr('text-anchor', 'end').attr('font-family', fonts.body);
+      line2.append('tspan').attr('fill', colors.text).attr('font-weight', 700).attr('font-size', CONTENT_SIZE).text('26.5 million tokens');
 
-    const line3 = stat.append('text').attr('y', 48).attr('text-anchor', 'end').attr('font-family', fonts.body);
-    line3.append('tspan').attr('fill', colors.grey).attr('font-size', CONTENT_SIZE).text('approx. cost ');
-    line3.append('tspan').attr('fill', colors.text).attr('font-weight', 700).attr('font-size', CONTENT_SIZE).text('US$400');
+      const line3 = stat.append('text').attr('y', 48).attr('text-anchor', 'end').attr('font-family', fonts.body);
+      line3.append('tspan').attr('fill', colors.grey).attr('font-size', CONTENT_SIZE).text('nominal token cost ');
+      line3.append('tspan').attr('fill', colors.text).attr('font-weight', 700).attr('font-size', CONTENT_SIZE).text('US$400');
+    }
   });
 </script>
 
