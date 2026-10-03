@@ -378,12 +378,33 @@
     e.preventDefault();
     nextTrial();
   }
+
+  // Scale the fixed phone layout (portrait, or landscape when the window is
+  // short — the same 520px rule as the CSS) down to fit the window, never up,
+  // so nothing needs to scroll. The bezel only shows on wider windows, so it's
+  // included in the size being fitted there.
+  let windowW = $state(0);
+  let windowH = $state(0);
+  let fit = $derived.by(() => {
+    if (!windowW || !windowH) return 1;
+    const landscape = windowH <= 520;
+    const framed = windowW >= 700;
+    const bezel = framed ? 24 : 0;
+    const margin = framed ? 24 : 0;
+    const w = (landscape ? 667 : 375) + bezel;
+    const h = (landscape ? 375 : 667) + bezel;
+    return Math.min(1, (windowW - margin * 2) / w, (windowH - margin * 2) / h);
+  });
 </script>
 
-<svelte:window onkeydown={handleTrialKeydown} />
+<svelte:window
+  onkeydown={handleTrialKeydown}
+  bind:innerWidth={windowW}
+  bind:innerHeight={windowH}
+/>
 
 <div class="page">
-  <div class="phoneScreen">
+  <div class="phoneScreen" style="transform: scale({fit})">
     {#if screen === 'intro'}
       <div class="screenContent introScreen">
         <h1 class="title">Synaesthesia Battery Test</h1>
@@ -684,33 +705,29 @@
 </div>
 
 <style>
-  /* Bug fix: `orientation: landscape` (width>height) fired on nearly every
-     desktop window regardless of actual height. Switched to max-height so
-     portrait shows whenever height allows, landscape only when height is
-     genuinely scarce — same rule everywhere, per Bryony. */
+  /* Portrait phone by default; landscape (667x375) whenever height is
+     genuinely scarce — same rule everywhere. Each is a fixed design that is
+     scaled to fit the window (see `fit` in the script), never reflowed. */
   :root {
     --phone-w: 375px;
     --phone-h: 667px;
-    /* Picker + letter each get a share of the PHONE's height (not the
-       window's, which can be much taller than the phone on desktop), so
-       the two plus the button always fit on the screen. */
-    --wheelSize: clamp(130px, calc((min(var(--phone-h), 100dvh) - 290px) / 2), 340px);
+    --wheelSize: 188px;
     /* The square must also leave room for the hue bar beside it. */
-    --pickerSize: min(calc(var(--wheelSize) * 1.2), calc(min(var(--phone-w), 100vw) - 48px - 40px));
+    --pickerSize: calc(var(--wheelSize) * 1.2);
   }
   @media (max-height: 520px) {
     :root {
       --phone-w: 667px;
       --phone-h: 375px;
-      /* Width is ample in landscape; wheel sized directly off height instead. */
-      --wheelSize: clamp(200px, 50dvh, 300px);
+      --wheelSize: 176px;
       --pickerSize: var(--wheelSize);
     }
   }
 
   .page {
-    min-height: 100dvh;
+    height: 100dvh;
     width: 100%;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -721,18 +738,14 @@
     position: relative;
     width: var(--phone-w);
     height: var(--phone-h);
-    max-width: 100vw;
-    max-height: 100dvh;
+    flex: none;
+    transform-origin: center center;
     overflow: hidden;
     background: var(--background);
   }
 
   /* Desktop-only: a real iPhone SE viewport never reaches this width. */
   @media (min-width: 700px) {
-    .page {
-      padding: 48px;
-      box-sizing: border-box;
-    }
     .phoneScreen {
       border-radius: 46px;
       border: 12px solid var(--grey);
@@ -1074,11 +1087,6 @@
     .demoScreen {
       padding-top: 64px;
     }
-    /* Chrome is pinned to the top strip here; the bar keeps its line of
-       space above and the content itself stays where it was. */
-    .progressTrack {
-      margin: calc(var(--text-body, 16px) * 1.5) 0 0;
-    }
     .screenChrome {
       display: flex;
       flex-direction: column;
@@ -1095,12 +1103,12 @@
     }
   }
 
-  /* Placed after min-width block so it wins the cascade whenever height
+  /* Placed after the min-width block so it wins the cascade whenever height
      is scarce, regardless of width — covers a real phone rotated too. */
   @media (max-height: 520px) {
     .trialScreen,
     .demoScreen {
-      padding-top: 64px;
+      padding-top: 78px;
     }
     .progressTrack {
       margin: 0;
@@ -1118,6 +1126,10 @@
     }
     .trialRow {
       flex-direction: row;
+    }
+    /* Keep the example caption over the letter, clear of the picker. */
+    .demoScreen .screenChrome {
+      left: 270px;
     }
     .graphemeStage {
       flex: 1;
@@ -1186,7 +1198,7 @@
     justify-content: center;
     font-family: var(--font-heading);
     font-weight: 600;
-    font-size: clamp(80px, 24dvh, 160px);
+    font-size: clamp(80px, 150px, 160px);
     line-height: 1;
     color: var(--text);
   }
@@ -1209,6 +1221,26 @@
   .speedSwatch:focus-visible {
     outline: 3px solid var(--purple);
     outline-offset: 2px;
+  }
+  /* Landscape frame is only 375px tall: smaller type and tighter spacing so
+     every screen fits without scrolling. */
+  @media (max-height: 520px) {
+    .phoneScreen {
+      --text-body: 14px;
+      --text-lead: 19px;
+      --text-h3: 22px;
+      --text-caption: 12px;
+    }
+    .screenContent {
+      padding: 14px 24px;
+      gap: 8px;
+    }
+    .title {
+      margin: 0;
+    }
+    .bodyGap {
+      margin-bottom: 0.75em;
+    }
   }
   @media (max-height: 520px) {
     .speedScreen {
