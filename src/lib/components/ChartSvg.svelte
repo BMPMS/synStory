@@ -3654,7 +3654,7 @@
       <text class="pubFootnote"
         ><tspan class="pubFootnoteText">Data source: PubMed</tspan
         ><tspan> </tspan
-        ><a href="/chatGPTPublications.csv" download="chatGPTPublications.csv"
+        ><a href={`${import.meta.env.BASE_URL}chatGPTPublications.csv`} download="chatGPTPublications.csv"
           ><tspan class="pubFootnoteLink">(pre-1942 AI researched + cross checked)</tspan></a
         ></text
       >

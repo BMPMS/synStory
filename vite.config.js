@@ -5,6 +5,9 @@ import { defineConfig } from 'vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [svelte()],
+  // GitHub Pages serves a project site from /<repo>/, so the deploy workflow
+  // sets BASE_PATH=/synStory/. Locally it stays '/' and nothing changes.
+  base: process.env.BASE_PATH || '/',
   build: {
     rollupOptions: {
       // Two separate HTML entry points, not one router — the battery test

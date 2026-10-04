@@ -413,7 +413,7 @@
           consistent your own colour associations are — the same test researchers use
           to study <strong>grapheme-colour</strong> synaesthesia.
         </p>
-        <a class="storyLink" href="/">Read the story behind this test →</a>
+        <a class="storyLink" href={import.meta.env.BASE_URL}>Read the story behind this test →</a>
         <label class="fieldLabel" for="nameInput">Your name</label>
         <input
           id="nameInput"
@@ -698,7 +698,7 @@
         <a class="storyLink" href="https://synesthete.ircn.jp/" target="_blank" rel="noopener">
           Want to know more or take more tests? →
         </a>
-        <a class="storyLink" href="/">Read the story behind this test →</a>
+        <a class="storyLink" href={import.meta.env.BASE_URL}>Read the story behind this test →</a>
       </div>
     {/if}
   </div>

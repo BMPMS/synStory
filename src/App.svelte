@@ -310,7 +310,7 @@
         >
           <p class="whyICareCtaTitle">What about you?</p>
           <p class="whyICareCtaBody">Take the <strong>Synaesthesia Battery Test</strong> and find out.</p>
-          <a class="whyICareCtaButton" href="/test.html">Start Test</a>
+          <a class="whyICareCtaButton" href={`${import.meta.env.BASE_URL}test.html`}>Start Test</a>
         </div>
       </div>
 
