@@ -133,10 +133,10 @@
       .attr('stroke', colors.grey);
 
     // Instant tooltip instead of a native <title> (which waits a second or
-    // more to appear). Same look as the story chart's tooltip: white box,
-    // grey border, caption-size body font. Tap also shows it on touch.
+    // more to appear). Page-colour box with a light-grey border so it
+    // can't be mistaken for a heat-map cell (their borders are grey); caption-size body font. Tap also shows it on touch.
     const tip = svg.append('g').attr('class', 'cellTip').style('opacity', 0).style('pointer-events', 'none');
-    const tipBg = tip.append('rect').attr('rx', 4).attr('fill', '#fff').attr('stroke', colors.grey);
+    const tipBg = tip.append('rect').attr('rx', 4).attr('fill', colors.background).attr('stroke', colors.grey);
     const tipText = tip.append('text').attr('font-family', 'var(--font-body)').attr('font-size', 15);
     const tipLine = 18;
     function showTip(d) {
@@ -162,13 +162,25 @@
       tipBg.attr('x', -padX).attr('y', -padY).attr('width', tw).attr('height', th);
       const cx = colX.get(d.agent) + cw / 2;
       const bx = Math.max(4, Math.min(width - 4 - tw, cx - tw / 2));
-      const by = Math.max(4, y(d.process) - th - 2);
+      const by = Math.max(4, y(d.process) - th - 3);
       tip.attr('transform', `translate(${bx + padX},${by + padY})`).style('opacity', 1);
     }
+    // The hovered cell also thickens its outline a touch (raised first so
+    // neighbours can't cover the wider stroke) and the cursor is a pointer.
+    const setCell = (el, wide) =>
+      d3.select(el).select('rect').transition().duration(120).attr('stroke-width', wide ? 2.5 : 1);
     const hideTip = () => tip.style('opacity', 0);
-    g.style('cursor', 'default')
-      .on('mouseenter', (e, d) => showTip(d))
-      .on('mouseleave', hideTip)
+    g.style('cursor', 'pointer')
+      .on('mouseenter', function (e, d) {
+        d3.select(this).raise();
+        tip.raise();
+        setCell(this, true);
+        showTip(d);
+      })
+      .on('mouseleave', function () {
+        setCell(this, false);
+        hideTip();
+      })
       .on('click', (e, d) => {
         e.stopPropagation();
         showTip(d);

@@ -31,7 +31,10 @@ export const step3 = {
   // leadText element reused for the next line once cleared.
   lead: { fadeOut: { start: 0.0, end: 0.3 } },
   title: { start: 0.0, end: 0.35 },
-  whatIs: { fadeIn: { start: 0.15, end: 0.4 } },
+  // Waits for SYNAESTHESIA to land (title ends 0.35): on a phone the word
+  // is wider than the gap between "What is" and "?" while it's still
+  // travelling, so fading them in earlier made all three collide.
+  whatIs: { fadeIn: { start: 0.35, end: 0.45 } },
   senses: {
     text: "It's when one of the FIVE SENSES",
     // Starts right as whatIs finishes.

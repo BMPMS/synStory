@@ -368,7 +368,10 @@
 
     try {
       if (file && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], text });
+        // Link passed as its own field (not folded into the text) so
+        // the share target can place it after the picture rather than
+        // fusing it into the first message bubble.
+        await navigator.share({ files: [file], text: intro, url });
         shareState = 'idle';
         return;
       }

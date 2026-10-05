@@ -658,8 +658,11 @@
 
     // Everything the panel needs for one person at one font scale.
     function panelContent(name, edgeKey, scale, maxWidth) {
-      const nameSize = Math.max(14, Math.round(typeScale.body * scale));
-      const bodySize = Math.max(11, Math.round(typeScale.caption * scale));
+      // Phones: one step down the type scale (name body -> caption, text
+      // caption -> micro) so the panel sits comfortably in the free band.
+      const phone = width < breakpoints.mobile;
+      const nameSize = Math.max(14, Math.round((phone ? typeScale.caption : typeScale.body) * scale));
+      const bodySize = Math.max(11, Math.round((phone ? typeScale.micro : typeScale.caption) * scale));
       const lineH = bodySize * 1.4;
       const bodyFont = { family: 'var(--font-body)', size: bodySize };
 
@@ -746,7 +749,7 @@
       c.relLines.forEach((line) => {
         const t = relsG.append('text').attr('class', 'personPanelRel').attr('x', cx).attr('y', y).attr('font-size', c.bodySize);
         line.forEach((seg, i) => {
-          if (i > 0) t.append('tspan').attr('class', 'personPanelSep').text(' · ');
+          if (i > 0) t.append('tspan').attr('class', 'personPanelSep').text('\u00A0\u2009·\u00A0');
           // Each end of the hovered photo's own relationship is bold and
           // tinted with its sense's colour; the person's other
           // relationships are plain grey (Bryony).
@@ -757,7 +760,7 @@
               .style('font-weight', seg.emph ? 700 : null)
               .text(label);
           word(seg.fromLabel, seg.fromKey);
-          t.append('tspan').style('fill', seg.emph ? 'var(--text)' : 'var(--grey)').text(' → ');
+          t.append('tspan').style('fill', seg.emph ? 'var(--text)' : 'var(--grey)').text('\u00A0→\u00A0');
           word(seg.toLabel, seg.toKey);
         });
         y += c.lineH;
@@ -3122,6 +3125,14 @@
     function setSightProgress(t) {
       if (!answer) return;
       sightT = t;
+      // Touch: a tapped photo's tooltip / panel / highlight has no mouseleave to
+      // close it, so close them when scrolling back above the point where the
+      // photos start to fly (they aren't on screen to tap any more).
+      if (t < step5.move.start && window.matchMedia('(hover: none)').matches) {
+        hidePersonTooltip();
+        hidePersonPanel();
+        clearLinkHighlight();
+      }
 
       // Pure functions of t, so scrolling back up unwinds cleanly.
       const arriveT = phase(t, step5.arrive.fadeOut.start, step5.arrive.fadeOut.end);
@@ -3485,7 +3496,11 @@
       svg.attr('viewBox', `0 0 ${width} ${height}`);
 
       const firstRun = personGroups === undefined;
-      const newTile = tileSizeFor(width);
+      // Short phone screens (iPhone SE with Safari's bars, ~550px of chart):
+      // the same 12 tiles have far less room to drift in, so they jam and
+      // bump in place. Shrink them with the height, down to ~70%.
+      const heightScale = width < 420 ? Math.max(0.7, Math.min(1, height / 700)) : 1;
+      const newTile = Math.round(tileSizeFor(width) * heightScale);
       const tileChanged = newTile !== TILE;
       if (firstRun || tileChanged) {
         TILE = newTile;
