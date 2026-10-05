@@ -5,13 +5,15 @@
     buildTrialSequence,
     scoreConsistency,
     describeConsistency,
+    describeLowVariety,
     buildSpeedTrials,
     isSpeedAnswerCorrect,
     scoreSpeed,
-    describeSpeed,
     SPEED_OPTIONS,
     REPEATS_PER_GRAPHEME
   } from './lib/data/graphemeTest.js';
+  import { renderShareCard } from './lib/shareCard.js';
+  const SHARE_URL = 'https://bmpms.github.io/synStory/test';
   import { supabase, supabaseConfigured } from './lib/supabase.js';
 
   let screen = $state('intro'); // 'intro' | 'instructions' | 'demo' | 'confirmStart' | 'trial' | 'speedIntro' | 'speed' | 'results'
@@ -24,15 +26,13 @@
   let hasTakenBefore = $state(null); // null (unanswered) | true | false
   let saveState = $state('idle'); // 'idle' | 'saving' | 'saved' | 'error'
   let aggregate = $state(null); // { count, avgScore } once fetched, for the results footnote
-  let shareState = $state('idle'); // 'idle' | 'copied' — only used by the clipboard fallback below
+  let shareState = $state('idle'); // 'idle' | 'working' | 'copied' | 'saved'
 
   let trialSequence = $state([]);
   let trialIndex = $state(0);
   /** @type {Record<string, string[]>} */
   let responsesByGrapheme = $state({});
 
-  // Trial start time, used to derive a live "~N min left" estimate.
-  let testStartTime = $state(0);
 
   // Hand-built colour picker (not native <input type="color">, so it's
   // consistent across browsers): a saturation/brightness square plus a hue
@@ -219,19 +219,6 @@
   const currentGrapheme = $derived(trialSequence[trialIndex]);
   const trialNumber = $derived(trialIndex + 1);
 
-  // Recomputed from the subject's own average pace, more accurate over time.
-  let remainingTimeLabel = $derived.by(() => {
-    if (trialIndex < 3) return null;
-    const elapsedMs = Date.now() - testStartTime;
-    const avgMsPerTrial = elapsedMs / trialIndex;
-    const remainingTrials = totalTrials() - trialIndex;
-    const remainingMs = avgMsPerTrial * remainingTrials;
-    const mins = Math.round(remainingMs / 60000);
-    if (mins <= 0) return 'less than a minute left';
-    if (mins === 1) return '~1 min left';
-    return `~${mins} min left`;
-  });
-
   // One-off encouragement at quarter marks, replacing the usual count.
   let milestoneLabel = $derived.by(() => {
     const total = totalTrials();
@@ -242,13 +229,12 @@
     return null;
   });
 
-  let progressLabel = $derived(
-    milestoneLabel ??
-      `${trialNumber} / ${totalTrials()}${remainingTimeLabel ? ' · ' + remainingTimeLabel : ''}`
-  );
+  // No "~N min left" estimate: it only counted the colour rounds, so it said
+  // "less than a minute left" with the whole speed test still to come.
+  let progressLabel = $derived(milestoneLabel ?? `${trialNumber} / ${totalTrials()}`);
 
   function startInstructions() {
-    if (!name.trim() || hasTakenBefore === null) return;
+    if (!name.trim() || hasTakenBefore !== false) return;
     screen = 'instructions';
   }
 
@@ -256,7 +242,6 @@
     trialSequence = buildTrialSequence();
     trialIndex = 0;
     responsesByGrapheme = {};
-    testStartTime = Date.now();
     resetPicker();
     screen = 'trial';
   }
@@ -271,7 +256,9 @@
       results = scoreConsistency(responsesByGrapheme);
       // The colour test is done and saved; the speed test follows, then
       // the combined results screen.
-      saveResults();
+      // A guard-tripped result (all one colour) isn't saved, so it can't skew
+      // the average everyone else is compared to.
+      if (!results.lowVariety) saveResults();
       screen = 'speedIntro';
     } else {
       trialIndex += 1;
@@ -340,24 +327,82 @@
     aggregate = { count: data.length, avgScore };
   }
 
-  // Native share sheet (iOS/Android/most mobile browsers) where it's
-  // available — which is the common case here, since this app is phone-
-  // shaped to begin with. Falls back to copying the same text + link, for
-  // desktop browsers that don't support navigator.share. Shares the band
-  // label only (e.g. "highly consistent"), never the score or the actual
-  // colour picks.
-  function shareResult(bandLabel) {
-    const text = `I just found out I'm a "${bandLabel.toLowerCase()}" grapheme-colour synaesthete (or not!) according to this quick colour test — curious what you'd get?`;
-    const url = `${window.location.origin}/test.html`;
-    if (navigator.share) {
-      navigator.share({ title: 'Synaesthesia Battery Test', text, url }).catch(() => {});
-    } else if (navigator.clipboard) {
-      navigator.clipboard.writeText(`${text} ${url}`);
-      shareState = 'copied';
-      setTimeout(() => {
-        shareState = 'idle';
-      }, 2500);
+  // Shares a square picture of the person's own colours (see shareCard.js)
+  // plus the link. Uses the native share sheet with the image attached where
+  // the browser supports files (most phones); otherwise downloads the PNG so
+  // it can be posted or emailed by hand. If the image can't be drawn, falls
+  // back to sharing text only. No name, score or raw picks are ever included.
+  async function shareResult(bandLabel, perGrapheme, lowVariety) {
+    // Always the public address, so a share made while testing locally still
+    // points somewhere real.
+    const url = SHARE_URL;
+    const intro = 'I just took a Synaesthesia Battery Test. What would yours say?';
+    const text = `${intro} ${url}`;
+    // Where we control the clipboard, paste gives a real link in an email or
+    // doc (the native share sheet only takes plain text).
+    const copyLink = async () => {
+      const html = `${intro} <a href="${url}">${url}</a>`;
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html': new Blob([html], { type: 'text/html' }),
+            'text/plain': new Blob([text], { type: 'text/plain' })
+          })
+        ]);
+      } catch {
+        await navigator.clipboard?.writeText(text).catch(() => {});
+      }
+    };
+    shareState = 'working';
+    let file = null;
+    try {
+      const blob = await renderShareCard(
+        perGrapheme,
+        bandLabel,
+        SHARE_URL.replace(/^https?:\/\//, '')
+      );
+      file = new File([blob], 'my-alphabet-in-colour.png', { type: 'image/png' });
+    } catch {
+      file = null;
     }
+
+    try {
+      if (file && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], text });
+        shareState = 'idle';
+        return;
+      }
+      if (file) {
+        const href = URL.createObjectURL(file);
+        const a = document.createElement('a');
+        a.href = href;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(href), 1000);
+        // The picture can't carry a clickable link, so put one on the clipboard.
+        copyLink();
+        shareState = 'saved';
+      } else if (navigator.share) {
+        await navigator.share({ title: 'Synaesthesia Battery Test', text });
+        shareState = 'idle';
+        return;
+      } else if (navigator.clipboard) {
+        await copyLink();
+        shareState = 'copied';
+      } else {
+        shareState = 'idle';
+        return;
+      }
+    } catch {
+      // Share sheet dismissed — nothing to report.
+      shareState = 'idle';
+      return;
+    }
+    setTimeout(() => {
+      shareState = 'idle';
+    }, 3500);
   }
 
   // Enter/Return finishes a trial the same as clicking Next/Finish —
@@ -387,7 +432,7 @@
   let windowH = $state(0);
   let fit = $derived.by(() => {
     if (!windowW || !windowH) return 1;
-    const landscape = windowH <= 520;
+    const landscape = windowH <= 520 && windowW > windowH; // same rule as the CSS media query
     const framed = windowW >= 700;
     const bezel = framed ? 24 : 0;
     const margin = framed ? 24 : 0;
@@ -406,13 +451,10 @@
 <div class="page">
   <div class="phoneScreen" style="transform: scale({fit})">
     {#if screen === 'intro'}
-      <div class="screenContent introScreen">
+      <div class="screenContent introScreen centredScreen">
         <h1 class="title">Synaesthesia Battery Test</h1>
-        <p class="body">
-          Do letters and numbers make you see colours? This short test checks how
-          consistent your own colour associations are — the same test researchers use
-          to study <strong>grapheme-colour</strong> synaesthesia.
-        </p>
+        <p class="body">Do letters and numbers make you see colours?</p>
+        <p class="body">Take the test to check how consistent your own colour associations are.</p>
         <a class="storyLink" href={import.meta.env.BASE_URL}>Read the story behind this test →</a>
         <label class="fieldLabel" for="nameInput">Your name</label>
         <input
@@ -445,30 +487,29 @@
           </button>
         </div>
         {#if hasTakenBefore}
+          <p class="fieldHint">Wrong answer, sorry.</p>
           <p class="fieldHint">
-            This measures how <em>consistent</em> your colour choices are — if you
-            remember your old answers you'll likely just repeat them instead of
-            reacting freshly, which inflates the score. For a meaningful result,
-            leave at least <strong>6 months</strong> between attempts.
+            For a meaningful result, leave at least <strong>6 months</strong> between attempts.
           </p>
+        {:else}
+          <button
+            class="primaryButton"
+            disabled={!name.trim() || hasTakenBefore === null}
+            onclick={startInstructions}
+          >
+            Continue
+          </button>
         {/if}
-        <button
-          class="primaryButton"
-          disabled={!name.trim() || hasTakenBefore === null}
-          onclick={startInstructions}
-        >
-          Continue
-        </button>
       </div>
     {:else if screen === 'instructions'}
       <div class="screenContent centredScreen">
         <h2 class="subtitle">How it works</h2>
         <p class="body bodyGap">
-          You'll see <strong>36 letters and numbers</strong>, each shown
-          <strong>{REPEATS_PER_GRAPHEME} times</strong> in a random order — 108 rounds in total.
+          You'll see 36 letters and numbers, each shown
+          {REPEATS_PER_GRAPHEME} times in a random order — 108 rounds in total.
         </p>
-        <p class="body">For each one, pick whichever colour feels right. Don't overthink it.</p>
-        <p class="body">Then there's a quick <strong>speed test</strong>.</p>
+        <p class="body">Pick whichever colour feels right. Don't overthink it.</p>
+        <p class="body">Then there's a quick speed test.</p>
         <button class="primaryButton" onclick={() => (screen = 'demo')}>Start</button>
       </div>
     {:else if screen === 'demo'}
@@ -509,9 +550,9 @@
       <div class="screenContent centredScreen">
         <h2 class="subtitle">One thing before you start</h2>
         <p class="body">This takes 10–15 minutes</p>
-        <p class="body">108 rounds<br />+ short speed test</p>
+        <p class="body">108 rounds<br />short speed test</p>
         <p class="body">Start to finish, with no way to pause partway through.</p>
-        <p class="body">Worth making sure you've got the time before you <strong>dive in</strong>.</p>
+        <p class="body">Worth making sure you've got the time before you dive in.</p>
         <button class="primaryButton" onclick={startTrials}>Yes, I'm ready</button>
         <button
           class="secondaryButton"
@@ -603,14 +644,14 @@
         <p class="keyHint">or press Return</p>
       </div>
     {:else if screen === 'speedIntro'}
-      <div class="screenContent">
+      <div class="screenContent centredScreen">
         <h2 class="subtitle">Now, a speed test</h2>
         <p class="body">
           Colour test done! One more part, a few more minutes.
         </p>
         <p class="body">
           You'll see a letter or number, with {SPEED_OPTIONS} colours underneath. Tap the one
-          <strong>you chose for it</strong> as quickly as you can. Don't stop to think — go with
+          you chose for it as quickly as you can. Don't stop to think — go with
           your first instinct.
         </p>
         <button class="primaryButton" onclick={startSpeedTest}>Start</button>
@@ -636,12 +677,11 @@
         </div>
       </div>
     {:else if screen === 'results'}
-      {@const band = describeConsistency(results.overallScore)}
-      {@const speedBand = describeSpeed(speedResults)}
+      {@const band = results.lowVariety ? describeLowVariety() : describeConsistency(results.overallScore)}
       <div class="screenContent resultsScreen">
         <h2 class="subtitle">Nice work, {name}!</h2>
         <p class="scoreLabel">{band.label}</p>
-        <p class="body">
+        <p class="body resultsDetail">
           {band.detailBefore}{#if band.detailBold}<strong>{band.detailBold}</strong>{/if}{band.detailAfter}
         </p>
 
@@ -659,16 +699,18 @@
         </div>
 
         <h3 class="resultsSubheading">Speed test</h3>
-        <p class="scoreLabel">{speedBand.label}</p>
-        <p class="body">{speedBand.detail}</p>
         <p class="body">
           <strong>{speedResults.correctCount} of {speedResults.total}</strong> correct{#if speedResults.medianMs != null}, typically in <strong>{(speedResults.medianMs / 1000).toFixed(1)}s</strong>{/if}.
         </p>
 
         <p class="footnote">
-          This is a fun, informal version of the real test — not a diagnostic tool.
+          This is a fun, informal version of the
+          <a class="inlineLink" href="https://synesthete.ircn.jp/" target="_blank" rel="noopener">real test</a>
+          — not a diagnostic tool.
         </p>
-        {#if supabaseConfigured}
+        {#if results.lowVariety}
+          <!-- not saved, nothing to say -->
+        {:else if supabaseConfigured}
           {#if saveState === 'saved' && aggregate}
             <p class="footnote">
               Saved — you're one of {aggregate.count} people who've taken this so far
@@ -688,16 +730,20 @@
           <p class="footnote">Results aren't saved anywhere yet.</p>
         {/if}
 
-        <button class="secondaryButton" type="button" onclick={() => shareResult(band.label)}>
-          Share your result
+        <button
+          class="shareLink"
+          type="button"
+          disabled={shareState === 'working'}
+          onclick={() => shareResult(band.label, results.perGrapheme, results.lowVariety)}
+        >
+          {shareState === 'working' ? 'Making your picture…' : 'Share your result →'}
         </button>
-        {#if shareState === 'copied'}
+        {#if shareState === 'saved'}
+          <p class="fieldHint">Picture saved, and the link is copied — post or email them anywhere!</p>
+        {:else if shareState === 'copied'}
           <p class="fieldHint">Copied — paste it anywhere!</p>
         {/if}
 
-        <a class="storyLink" href="https://synesthete.ircn.jp/" target="_blank" rel="noopener">
-          Want to know more or take more tests? →
-        </a>
         <a class="storyLink" href={import.meta.env.BASE_URL}>Read the story behind this test →</a>
       </div>
     {/if}
@@ -715,7 +761,7 @@
     /* The square must also leave room for the hue bar beside it. */
     --pickerSize: calc(var(--wheelSize) * 1.2);
   }
-  @media (max-height: 520px) {
+  @media (max-height: 520px) and (orientation: landscape) {
     :root {
       --phone-w: 667px;
       --phone-h: 375px;
@@ -787,6 +833,11 @@
     color: var(--text);
   }
 
+  /* One step down from body, for the sentence under the result label. */
+  .resultsDetail {
+    font-size: var(--text-caption, 14px);
+  }
+
   .centredScreen {
     text-align: center;
   }
@@ -817,12 +868,34 @@
     color: var(--grey);
     margin: 2px 0 0;
   }
-  .storyLink {
-    font-family: var(--font-body);
-    font-size: var(--text-caption, 14px);
+  .introScreen .textInput {
+    text-align: center;
+  }
+  .inlineLink {
     color: var(--purple);
     text-decoration: underline;
     text-underline-offset: 2px;
+  }
+  /* The two links at the foot of the results: same look, midway between
+     caption and body size. */
+  .storyLink,
+  .shareLink {
+    font-family: var(--font-body);
+    font-size: calc((var(--text-caption, 14px) + var(--text-body, 16px)) / 2);
+    color: var(--purple);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .shareLink {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+  }
+  .shareLink:disabled {
+    cursor: default;
+    opacity: 0.6;
   }
   .secondaryButton {
     font-family: var(--font-heading);
@@ -885,6 +958,9 @@
   .trialScreen,
   .demoScreen {
     align-items: stretch;
+    /* 8px less at the bottom: the block above was nudged down, and this
+       keeps the button clear of the sliders on short phones. */
+    padding-bottom: 20px;
   }
 
   /* display: contents makes this wrapper invisible in portrait; the
@@ -916,6 +992,8 @@
      landscape switches to a row. --wheelSize keeps both explicitly sized
      so the wheel stays circular under crowding. */
   .trialRow {
+    /* Nudged down (Bryony; 20px in total once the 4px from the smaller bottom padding below is counted): the picker, sliders and letter together. */
+    transform: translateY(16px);
     flex: 1;
     min-height: 0;
     display: flex;
@@ -934,7 +1012,7 @@
   .grapheme {
     font-family: var(--font-heading);
     font-weight: 600;
-    font-size: calc(var(--wheelSize) * 0.58 * 1.2);
+    font-size: calc(var(--wheelSize) * 0.58 * 1.2 * 1.2);
     line-height: 1;
     transition: color 0.1s ease;
     /* Soft shadow keeps pale colours readable against the warm-ivory bg. */
@@ -1060,11 +1138,11 @@
   .demoLabel {
     font-family: var(--font-heading);
     font-weight: 600;
-    font-size: var(--text-caption, 14px);
+    font-size: var(--text-body, 16px);
     color: var(--purple);
     text-align: center;
     /* Bryony: "Here's an example" goes down a line height. */
-    margin: calc(var(--text-caption, 14px) * 1.5) 0 0;
+    margin: calc(var(--text-body, 16px) * 1.5) 0 0;
   }
   .demoQuote {
     font-style: italic;
@@ -1080,9 +1158,10 @@
     pointer-events: none;
   }
 
-  /* Desktop/tablet: wheel-then-letter top-to-bottom (`column`), chrome
-     pinned to its own top strip, per Bryony's reference screenshots. */
-  @media (min-width: 700px) {
+  /* Every portrait screen (phone, tablet, desktop): colour panel above the
+     letter top-to-bottom (`column`), chrome pinned to its own top strip, per
+     Bryony's reference screenshots. Landscape overrides this further down. */
+  @media screen {
     .trialScreen,
     .demoScreen {
       padding-top: 64px;
@@ -1105,13 +1184,42 @@
 
   /* Placed after the min-width block so it wins the cascade whenever height
      is scarce, regardless of width — covers a real phone rotated too. */
-  @media (max-height: 520px) {
-    .trialScreen,
-    .demoScreen {
-      padding-top: 78px;
+  @media (max-height: 520px) and (orientation: landscape) {
+    /* Landscape: the picker + sliders block is centred in the space from the
+       top of the screen down to the start of the button (the progress/caption
+       chrome is overlaid at the top, so there's no top padding). */
+    .screenContent.trialScreen,
+    .screenContent.demoScreen {
+      padding-top: 0;
+    }
+    .trialRow {
+      transform: none;
+      margin-bottom: -8px; /* the 8px flex gap above the button */
+    }
+    .grapheme {
+      font-size: calc(var(--wheelSize) * 0.58 * 1.2 * 1.2 * 1.5);
+    }
+    /* The progress bar (test) and "Here's an example" (demo) span the area
+       above the big letter: they start just right of the picker panel
+       (24px margin + 220px panel + 16px gap = 260px, i.e. 236px plus the
+       chrome's own 24px side padding). */
+    .trialScreen .screenChrome,
+    .demoScreen .screenChrome {
+      left: 236px;
+    }
+    .demoLabel {
+      font-size: var(--text-lead, 24px);
+    }
+    /* The 1.5x letter is tall: nudge it down so it clears the example caption. */
+    .demoScreen .graphemeStage {
+      transform: translateY(14px);
     }
     .progressTrack {
       margin: 0;
+    }
+    /* Colour test only: the bar sits 10px lower. */
+    .trialScreen .progressTrack {
+      margin-top: 10px;
     }
     .screenChrome {
       display: flex;
@@ -1126,10 +1234,6 @@
     }
     .trialRow {
       flex-direction: row;
-    }
-    /* Keep the example caption over the letter, clear of the picker. */
-    .demoScreen .screenChrome {
-      left: 270px;
     }
     .graphemeStage {
       flex: 1;
@@ -1224,7 +1328,7 @@
   }
   /* Landscape frame is only 375px tall: smaller type and tighter spacing so
      every screen fits without scrolling. */
-  @media (max-height: 520px) {
+  @media (max-height: 520px) and (orientation: landscape) {
     .phoneScreen {
       --text-body: 14px;
       --text-lead: 19px;
@@ -1242,7 +1346,7 @@
       margin-bottom: 0.75em;
     }
   }
-  @media (max-height: 520px) {
+  @media (max-height: 520px) and (orientation: landscape) {
     .speedScreen {
       overflow-y: auto;
     }
@@ -1252,6 +1356,7 @@
     }
     .speedGrid {
       grid-template-columns: repeat(6, 1fr);
+      transform: translateY(12px);
     }
   }
 </style>

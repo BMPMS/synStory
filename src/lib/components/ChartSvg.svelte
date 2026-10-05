@@ -23,7 +23,8 @@
   import { colors, spacing, typeScale, breakpoints } from '../theme.js'; // theme's --text-caption/--text-lead CSS vars carry the type scale
   import { senseIcons } from '../data/senseIcons.js';
   import { quotes } from '../data/quotes.js';
-  import { personIcon } from '../data/personIcon.js'; // placeholder icon, real art later
+  import { personIcon } from '../data/personIcon.js'; // placeholder icon for the step 9 participants, real art later
+  import { quotePersonIcons, quotePersonIconSize } from '../data/quotePersonIcons.js'; // the 5 quote-people (steps 4-5)
   import { sightSubIcons } from '../data/sightSubIcons.js'; // sight's 3 sub-icons, step 5
   import { synaesthesiaLinks } from '../data/synaesthesiaLinks.js'; // who has which cross-sense association (step 6)
   import { famousQuotes } from '../data/famousQuotes.js'; // one quote per person, shown in the hover panel under the diagram
@@ -144,13 +145,26 @@
     [-15.403, 7.319], [-18.317, 4.405], [-22.583, 2.455],
     [-25.118, 1.296], [-28.138, 0.478], [-31.727, 0]
   ];
+  const ICON_GAP_BELOW_TAIL = 20; // px from the bottom of the bubble's tail to the top of the quote-people icons
   const TAIL_HALF_SPAN = 31.727; // how far the tail's curve reaches out from its own apex, at reference scale
+
+  // On narrow screens the bubble is capped to the screen width, so a full-size
+  // corner (r) + tail half-span can't fit between the bubble's edge and the
+  // outer icons, and the tail would stop short of sitting above them.
+  // layoutPeopleBubble() sets these two caps so the tail can still reach the
+  // outermost icons (Infinity = no cap, e.g. desktop): the corners shrink
+  // more than the tail does, so the tail keeps most of its size.
+  let bubbleCornerCap = Infinity;
+  let bubbleTailCap = Infinity;
+  const bubbleCornerScale = (h) => Math.min(h / 202, bubbleCornerCap);
+  const bubbleTailScale = (h) => Math.min(h / 202, bubbleTailCap);
 
   // Bubble with a tail; personT (0-1) positions it left-right.
   function bubblePersonPath(x, y, w, h, personT) {
-    const scale = h / 202; // the reference design's own box height
-    const r = 50 * scale;
-    const kappa = 27.614 * scale; // same circular-bezier constant the reference corners use
+    const scale = bubbleTailScale(h); // the reference design's own box height is 202
+    const cornerScale = bubbleCornerScale(h);
+    const r = 50 * cornerScale;
+    const kappa = 27.614 * cornerScale; // same circular-bezier constant the reference corners use
 
     const left = x;
     const right = x + w;
@@ -197,8 +211,8 @@
   // Inverse of bubblePersonPath's tail placement — finds the personT
   // that points the tail at targetX.
   function personTForX(targetX, bx, bw, bh) {
-    const scale = bh / 202;
-    const r = 50 * scale;
+    const scale = bubbleTailScale(bh);
+    const r = 50 * bubbleCornerScale(bh);
     const halfTailSpan = TAIL_HALF_SPAN * scale;
     const safeLeft = bx + r + halfTailSpan;
     const safeRight = Math.max(safeLeft, bx + bw - r - halfTailSpan);
@@ -293,7 +307,7 @@
 
     // One per quote, join-once; x set by layoutPeopleBubble(), read by
     // setQuotesProgress() to aim the bubble's tail.
-    const personIconNodes = quotes.map(() => ({ x: 0, y: 0, scale: 1, cropped: false }));
+    const personIconNodes = quotes.map((_, i) => ({ icon: quotePersonIcons[i % quotePersonIcons.length], x: 0, y: 0, scale: 1, cropped: false }));
     let personIconGroups;
 
     // Step 9: 36 participant icons, 18 synaesthetes + 18 controls, colour
@@ -973,7 +987,7 @@
         .data(personIconNodes)
         .join((enter) => {
           const g = enter.append('g').attr('class', 'personIconItem');
-          g.append('path').attr('class', 'personIconPath').attr('d', personIcon.path);
+          g.append('path').attr('class', 'personIconPath').attr('d', (d) => d.icon.path);
           return g;
         });
 
@@ -1209,6 +1223,13 @@
       return `translate(${d.x - 320 * d.scale},${d.y - localCenterY * d.scale}) scale(${d.scale})`;
     }
 
+    // Same idea for the 5 quote-people, whose canvas is 416 x 504, not square.
+    function quotePersonTransform(d) {
+      const { width: iw, height: ih, headCropHeight } = quotePersonIconSize;
+      const localCenterY = d.cropped ? headCropHeight / 2 : ih / 2;
+      return `translate(${d.x - (iw / 2) * d.scale},${d.y - localCenterY * d.scale}) scale(${d.scale})`;
+    }
+
     // Icon transform + quote "flash" pulse; d.x/d.y never overwritten,
     // only blended away from via d.sightAmt.
     function iconTransform(d) {
@@ -1378,24 +1399,15 @@
       const minBubbleH = specUnit * 2;
       const spaceForRow = rowBottomY - (bubbleY + minBubbleH * (1 + tailRatio) + spacing['4xl']);
       const cropped = spaceForRow < desiredHeight;
+      const { width: iconW, height: iconH, headCropHeight } = quotePersonIconSize;
       const scale = cropped
-        ? Math.max(20, Math.min(spaceForRow, maxIconWidth)) / personIcon.headCropHeight
-        : Math.min(desiredHeight, maxIconWidth) / 640;
-      const renderedHeight = (cropped ? personIcon.headCropHeight : 640) * scale;
-      const rowY = rowBottomY - renderedHeight / 2;
+        ? Math.max(20, Math.min(spaceForRow, maxIconWidth)) / headCropHeight
+        : Math.min(desiredHeight / iconH, maxIconWidth / iconW);
+      const renderedHeight = (cropped ? headCropHeight : iconH) * scale;
+      // Where the row WOULD sit if anchored to the bottom — only used to size
+      // the bubble (that sizing is unchanged); the row itself is then placed
+      // relative to the bubble's tail, below.
       const rowTopY = rowBottomY - renderedHeight;
-
-      personIconNodes.forEach((d, i) => {
-        d.x = rowMargin + slot * (i + 0.5);
-        d.y = rowY;
-        d.scale = scale;
-        d.cropped = cropped;
-      });
-
-      if (personIconGroups) {
-        personIconGroups.attr('transform', personIconTransform);
-        personIconGroups.select('.personIconPath').attr('clip-path', (d) => (d.cropped ? 'url(#personHeadClip)' : null));
-      }
 
       // Bubble height fills the gap between its top offset and the icon row.
       const available = rowTopY - bubbleY - spacing['4xl'];
@@ -1411,7 +1423,39 @@
       bubbleW = Math.min(width - 32, iconSpan + edge * 2);
       bubbleX = width / 2 - bubbleW / 2;
 
+      // If the bubble got squeezed by the screen edge, shrink its corners and
+      // tail just enough that the tail can still point straight down at the
+      // outermost icons (the middle ones always could).
+      const reachNeeded = Math.min(leftmostIconX - bubbleX, bubbleX + bubbleW - rightmostIconX);
+      if (reachNeeded > 0 && reachNeeded < (50 + TAIL_HALF_SPAN) * (bubbleH / 202)) {
+        bubbleCornerCap = (reachNeeded * 0.45) / 50;
+        bubbleTailCap = (reachNeeded * 0.55) / TAIL_HALF_SPAN;
+      } else {
+        bubbleCornerCap = Infinity;
+        bubbleTailCap = Infinity;
+      }
+
       svg.select('.quoteBubblePath').attr('d', bubblePersonPath(bubbleX, bubbleY, bubbleW, bubbleH, 0));
+
+      // Icons sit a fixed 20px below the tip of the bubble's tail, at every
+      // aspect ratio: top of each icon's own SVG space to the bottom of the
+      // arrow. (Tail depth = the path's own 39.86 reference depth, halved by
+      // its tailHeightScale, at the tail's actual scale.)
+      const tailTipY = bubbleY + bubbleH + 39.86 * bubbleTailScale(bubbleH) * 0.5;
+      const iconTopY = tailTipY + ICON_GAP_BELOW_TAIL;
+      const rowY = iconTopY + renderedHeight / 2;
+
+      personIconNodes.forEach((d, i) => {
+        d.x = rowMargin + slot * (i + 0.5);
+        d.y = rowY;
+        d.scale = scale;
+        d.cropped = cropped;
+      });
+
+      if (personIconGroups) {
+        personIconGroups.attr('transform', quotePersonTransform);
+        personIconGroups.select('.personIconPath').attr('clip-path', (d) => (d.cropped ? 'url(#personHeadClip)' : null));
+      }
     }
 
     // Quote words, built once, only opacity toggled; sense-word
@@ -3569,7 +3613,7 @@
     <defs>
       <!-- step 4/5 heads -->
       <clipPath id="personHeadClip">
-        <rect x="0" y="0" width="640" height="340" />
+        <rect x="0" y="0" width="416" height="420" />
       </clipPath>
       <!-- step 6/7 arrowheads  -->
       <marker

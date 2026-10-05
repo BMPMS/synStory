@@ -114,43 +114,89 @@ export function scoreConsistency(responsesByGrapheme) {
     return { grapheme, colors, meanDistance };
   });
   const overallScore = mean(perGrapheme.map((p) => p.meanDistance));
-  return { perGrapheme, overallScore };
+  const variety = checkColourVariety(responsesByGrapheme);
+  return { perGrapheme, overallScore, variety, lowVariety: variety.tooSimilar };
+}
+
+// Variety guard. Consistency alone can't tell a real grapheme-colour
+// synaesthete from someone who simply picks (about) the same colour for
+// everything — that scores a perfect 0. The research tooling for these tests
+// (the synr R package) guards against it by flagging anyone who gave roughly
+// the same colour on more than 60% of trials, or who used fewer than 3
+// clearly different colours. This is the same idea, in Lab distance: two
+// picks within VARIETY_SAME_DISTANCE of each other count as "roughly the same
+// colour".
+const VARIETY_SAME_DISTANCE = 25;
+const MAX_SAME_COLOUR_SHARE = 0.6;
+const MIN_DISTINCT_COLOURS = 3;
+const MIN_PICKS_FOR_A_COLOUR = 4; // a lone stray pick doesn't make a colour
+
+export function checkColourVariety(responsesByGrapheme) {
+  const labs = GRAPHEMES.flatMap((g) => (responsesByGrapheme[g] || []).map(hexToLab));
+  if (!labs.length) return { tooSimilar: false, biggestShare: 0, distinctColours: 0 };
+
+  // Biggest share of picks that are all roughly one colour.
+  let biggest = 0;
+  for (const centre of labs) {
+    const near = labs.filter((c) => labDistance(c, centre) <= VARIETY_SAME_DISTANCE).length;
+    if (near > biggest) biggest = near;
+  }
+  const biggestShare = biggest / labs.length;
+
+  // How many clearly different colours were used (greedy grouping).
+  const groups = [];
+  for (const c of labs) {
+    const group = groups.find((g) => labDistance(g.lab, c) <= VARIETY_SAME_DISTANCE);
+    if (group) group.count += 1;
+    else groups.push({ lab: c, count: 1 });
+  }
+  const distinctColours = groups.filter((g) => g.count >= MIN_PICKS_FOR_A_COLOUR).length;
+
+  return {
+    tooSimilar: biggestShare > MAX_SAME_COLOUR_SHARE || distinctColours < MIN_DISTINCT_COLOURS,
+    biggestShare,
+    distinctColours
+  };
+}
+
+// Shown instead of a consistency band when the guard above trips.
+export function describeLowVariety() {
+  return {
+    label: 'Not enough variety',
+    detailBefore:
+      'Most of your colours were similar, so we can’t score consistency.',
+    detailBold: null,
+    detailAfter: ''
+  };
 }
 
 // Deliberately descriptive, not diagnostic — these bands are a rough,
 // approximate read on the score for an engaging result screen, not a
 // clinical cutoff. Real batteries validate their own thresholds against
 // a studied population; this one hasn't been, and says so on screen.
-// "grapheme-colour" is the field's term for it, now used everywhere
-// user-facing too (was the plainer "letters + numbers -> colour") — and
-// bolded wherever it's rendered as HTML — split into detailBefore/
-// detailBold/detailAfter so the results screen can bold it with a real
-// <strong>, not string interpolation.
-const GRAPHEME_COLOUR = 'grapheme-colour';
+// detailBefore/detailBold/detailAfter let the results screen bold a phrase
+// with a real <strong>; currently none of the bands use it.
 
 export function describeConsistency(overallScore) {
   if (overallScore < 8) {
     return {
       label: 'Highly consistent',
-      detailBefore:
-        'Your colour choices for the same letter or number stayed remarkably close across all three rounds — the kind of result many people with ',
-      detailBold: GRAPHEME_COLOUR,
-      detailAfter: ' synaesthesia show.'
+      detailBefore: 'Your colours barely changed — likely you’re a grapheme → colour synaesthete.',
+      detailBold: null,
+      detailAfter: ''
     };
   }
   if (overallScore < 20) {
     return {
       label: 'Fairly consistent',
-      detailBefore:
-        'Your colour choices were noticeably steadier than chance across the three rounds — somewhat more consistent than most people without ',
-      detailBold: GRAPHEME_COLOUR,
-      detailAfter: ' synaesthesia tend to be.'
+      detailBefore: 'Steadier than chance and more consistent than most people.',
+      detailBold: null,
+      detailAfter: ''
     };
   }
   return {
     label: 'Variable',
-    detailBefore:
-      'Your colour choices varied a fair bit across the three rounds — the typical pattern for people who don’t experience letters or numbers as having an inherent colour.',
+    detailBefore: 'Your colours shifted a fair bit — likely you don’t have synaesthesia.',
     detailBold: null,
     detailAfter: ''
   };
