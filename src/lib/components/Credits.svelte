@@ -18,7 +18,7 @@
       This project was an <em>AI Collaboration Experiment</em> working with 3 rules
     </p>
     <div class="creditsRules">
-      <p><strong>FOLLOW</strong> a traditional project management flow</p>
+      <p><strong>FOLLOW</strong> my established data visualisation project flow</p>
       <p><strong>DON'T</strong> write a line of code</p>
       <p><strong>DO</strong> everything else <em>(with targeted AI when appropriate)</em></p>
     </div>

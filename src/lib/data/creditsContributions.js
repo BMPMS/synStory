@@ -4,14 +4,14 @@
 // this process", kept here as `null` and treated as 0 when drawn — same
 // rule the original Observable version used.
 export const creditsContributions = [
-  { process: 'Story concept + editorial direction', HUMAN: 100, CLAUDE: 0, 'CHAT GPT': null, OBSERVABLE: null },
-  { process: 'Data selection + interpretation', HUMAN: 70, CLAUDE: 0, 'CHAT GPT': 30, OBSERVABLE: 0 },
-  { process: 'Source research + cross-checking', HUMAN: 70, CLAUDE: 0, 'CHAT GPT': 30, OBSERVABLE: null },
-  { process: 'Tech stack + initial repo structure', HUMAN: 100, CLAUDE: 0, 'CHAT GPT': null, OBSERVABLE: null },
-  { process: 'Visual identity + coding style', HUMAN: 100, CLAUDE: 0, 'CHAT GPT': null, OBSERVABLE: null },
-  { process: 'Chart choice and design', HUMAN: 100, CLAUDE: 0, 'CHAT GPT': null, OBSERVABLE: null },
+  { process: 'Story concept + editorial', HUMAN: 100, CLAUDE: 0, 'CHAT GPT': null, OBSERVABLE: null },
+  { process: 'Data + interpretation', HUMAN: 70, CLAUDE: 0, 'CHAT GPT': 30, OBSERVABLE: 0 },
+  { process: 'Research + validation', HUMAN: 70, CLAUDE: 0, 'CHAT GPT': 30, OBSERVABLE: null },
+  { process: 'Tech + code spec', HUMAN: 100, CLAUDE: 0, 'CHAT GPT': null, OBSERVABLE: null },
+  { process: 'Visual identity', HUMAN: 100, CLAUDE: 0, 'CHAT GPT': null, OBSERVABLE: null },
+  { process: 'Chart choice + design', HUMAN: 100, CLAUDE: 0, 'CHAT GPT': null, OBSERVABLE: null },
   { process: 'Responsiveness strategy', HUMAN: 100, CLAUDE: 0, 'CHAT GPT': null, OBSERVABLE: null },
-  { process: 'Writing the code', HUMAN: 0, CLAUDE: 95, 'CHAT GPT': null, OBSERVABLE: 10 }
+  { process: 'Writing the code', HUMAN: 0, CLAUDE: 90, 'CHAT GPT': null, OBSERVABLE: 10 }
 ];
 
 // Column groups — Human stands alone; the three AI tools share a tinted

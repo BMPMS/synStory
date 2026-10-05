@@ -31,7 +31,7 @@
     const centerY = plotTop + plotHeight / 2;
     const xStart = margin.left, xEnd = width - margin.right;
     const THUMB_SIZE = 96; // 50% bigger, per Bryony
-    const TITLE_SIZE = 15; // matches theme typeScale.caption — day labels + axis label
+    const TITLE_SIZE = 17; // one step up from typeScale.caption (15) — day labels + axis label, same size as the Credits grid labels
     const CONTENT_SIZE = 19; // matches theme typeScale.body — the stat block's own line
 
     const svg = d3.select(svgEl);

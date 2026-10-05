@@ -39,7 +39,8 @@
     const pad = 6;
     const sectionGap = 20;
     const rowH = 42;
-    const margin = { top: 117, right: 24, bottom: 24, left: 280 };
+    const LABEL_SIZE = 17; // one step up from typeScale.caption — matches the Time spent chart's day/axis labels
+    const margin = { top: 121, right: 24, bottom: 24, left: 218 };
     const height = margin.top + rows.length * rowH + margin.bottom;
 
     // Sections laid out left to right, each sized to the agents it holds.
@@ -68,7 +69,7 @@
     // Section backgrounds + one hand-drawn icon per section — the rect
     // starts well above the icon's own top edge so it has real padding
     // above the robot's antenna, not just a snug fit.
-    const top = margin.top - 71;
+    const top = margin.top - 75;
     const bottom = margin.top + rows.length * rowH + 6;
     const sec = svg.append('g').selectAll('g').data(sections).join('g');
     sec
@@ -81,7 +82,7 @@
       .attr('rx', 10)
       .attr('fill', colors.backgroundTint);
     sec.each(function (d) {
-      const g = d3.select(this).append('g').attr('transform', `translate(${d.x + d.w / 2},${margin.top - 44})`);
+      const g = d3.select(this).append('g').attr('transform', `translate(${d.x + d.w / 2},${margin.top - 48})`);
       if (d.name === 'Human') drawPersonIcon(g);
       else drawRobotIcon(g);
     });
@@ -96,7 +97,7 @@
       .attr('y', margin.top - 12)
       .attr('text-anchor', 'middle')
       .attr('font-family', 'var(--font-body)')
-      .attr('font-size', 15)
+      .attr('font-size', LABEL_SIZE)
       .attr('fill', colors.greyDark)
       .text((d) => creditsAgentLabels[d]);
 
@@ -113,7 +114,7 @@
       .attr('text-anchor', 'end')
       .attr('dy', '0.35em')
       .attr('font-family', 'var(--font-body)')
-      .attr('font-size', 15)
+      .attr('font-size', LABEL_SIZE)
       .attr('fill', colors.greyDark)
       .text((d) => d);
 
@@ -130,7 +131,49 @@
       .attr('rx', 6)
       .attr('fill', (d) => color(d.value))
       .attr('stroke', colors.grey);
-    g.append('title').text((d) => `${d.process}\n${creditsAgentLabels[d.agent]}: ${d.value}%`);
+
+    // Instant tooltip instead of a native <title> (which waits a second or
+    // more to appear). Same look as the story chart's tooltip: white box,
+    // grey border, caption-size body font. Tap also shows it on touch.
+    const tip = svg.append('g').attr('class', 'cellTip').style('opacity', 0).style('pointer-events', 'none');
+    const tipBg = tip.append('rect').attr('rx', 4).attr('fill', '#fff').attr('stroke', colors.grey);
+    const tipText = tip.append('text').attr('font-family', 'var(--font-body)').attr('font-size', 15);
+    const tipLine = 18;
+    function showTip(d) {
+      const lines = [
+        { text: d.process, bold: true },
+        { text: `${creditsAgentLabels[d.agent]}: ${d.value}%`, bold: false }
+      ];
+      tipText.selectAll('tspan').remove();
+      lines.forEach((l, i) => {
+        tipText
+          .append('tspan')
+          .attr('x', 0)
+          .attr('y', (i + 1) * tipLine - 5)
+          .attr('font-weight', l.bold ? 700 : 400)
+          .attr('fill', colors.text)
+          .text(l.text);
+      });
+      const bb = tipText.node().getBBox();
+      const padX = 10;
+      const padY = 7;
+      const tw = bb.width + padX * 2;
+      const th = lines.length * tipLine + padY * 2;
+      tipBg.attr('x', -padX).attr('y', -padY).attr('width', tw).attr('height', th);
+      const cx = colX.get(d.agent) + cw / 2;
+      const bx = Math.max(4, Math.min(width - 4 - tw, cx - tw / 2));
+      const by = Math.max(4, y(d.process) - th - 2);
+      tip.attr('transform', `translate(${bx + padX},${by + padY})`).style('opacity', 1);
+    }
+    const hideTip = () => tip.style('opacity', 0);
+    g.style('cursor', 'default')
+      .on('mouseenter', (e, d) => showTip(d))
+      .on('mouseleave', hideTip)
+      .on('click', (e, d) => {
+        e.stopPropagation();
+        showTip(d);
+      });
+    svg.on('click', hideTip);
 
     // Legend: a 0-100% gradient bar, sitting clear of the tinted AI rect
     // above it (not overlapping it) — right-aligned over the grid. Just the
@@ -145,7 +188,7 @@
     grad.append('stop').attr('offset', '100%').attr('stop-color', color(100));
     const lg = svg.append('g').attr('transform', `translate(${lx},${legendY})`).attr('font-family', 'var(--font-body)').attr('fill', colors.greyDark);
     lg.append('rect').attr('width', lw).attr('height', lh).attr('rx', 2).attr('fill', `url(#${gradId})`).attr('stroke', colors.grey);
-    lg.append('text').attr('x', lw + 6).attr('y', lh).attr('font-size', 15).text('100%');
+    lg.append('text').attr('x', lw + 6).attr('y', lh).attr('font-size', LABEL_SIZE).text('100%');
   });
 </script>
 

@@ -795,6 +795,17 @@
       svg.selectAll('.sightSubIcon').classed('hl', (sIcon) => sIcon.key === from || sIcon.key === to);
     }
 
+    // Touch only: a tap that isn't on a link photo closes the panel opened by
+    // a tap on one. Listens on the document because the svg itself ignores
+    // pointer events (clicks fall through to the page behind it).
+    function dismissLinkOnTap(event) {
+      if (!window.matchMedia('(hover: none)').matches) return;
+      if (event.target.closest && event.target.closest('.linkPhotoItem')) return;
+      hidePersonTooltip();
+      hidePersonPanel();
+      clearLinkHighlight();
+    }
+
     function clearLinkHighlight() {
       svg.classed('linkHover', false);
       svg.selectAll('.hl').classed('hl', false);
@@ -936,12 +947,22 @@
       titleFontSize = Math.max(24, Math.min(40, width * 0.04)); // same formula as the header
       titleY = topPadding + titleFontSize / 2;
 
-      const scale = titleFontSize / etymWordFontSize;
-      const synWidthAtTitle = etymSynWidth * scale;
-      const aesthesiaWidthAtTitle = etymAesthesiaWidth * scale;
-
-      const whatIsEl = svg.select('.whatIsText').attr('font-size', titleFontSize).text('What is ');
-      const whatIsWidth = whatIsEl.node().getComputedTextLength();
+      // Measured at the title size with a throwaway element (not scaled
+      // from the big resting words): the 1px letter-spacing doesn't scale,
+      // and trailing spaces are measured differently by Safari/Chrome — both
+      // used to leave SYN/AESTHESIA/"?" too tight or too loose on phones.
+      const measure = (cls, str) => {
+        const t = svg.append('text').attr('class', cls).attr('font-size', titleFontSize).style('opacity', 0).text(str);
+        const w = t.node().getComputedTextLength();
+        t.remove();
+        return w;
+      };
+      const synWidthAtTitle = measure('synText', answer.syn);
+      const aesthesiaWidthAtTitle = measure('aesthesiaText', answer.aesthesia);
+      const whatIsEl = svg.select('.whatIsText').attr('font-size', titleFontSize).text('What is');
+      // One real word space, measured: "a a" minus "aa".
+      const spaceWidth = measure('whatIsText', 'a a') - measure('whatIsText', 'aa');
+      const whatIsWidth = measure('whatIsText', 'What is') + spaceWidth;
 
       const combinedWidth = whatIsWidth + synWidthAtTitle + aesthesiaWidthAtTitle;
       whatIsX = width / 2 - combinedWidth / 2;
@@ -1082,24 +1103,42 @@
       // instead — grey-ing is per relationship, the hovered photo's own
       // edge stays dark.
       const panelReadyT = step5.move.start + 0.85 * (step5.move.end - step5.move.start);
+      const enterPhoto = (d) => {
+        if (sightT < panelReadyT) {
+          const idx = personIndexByName.get(d.name);
+          const profession = idx != null ? people[idx].profession : '';
+          showPersonTooltip(d.x, d.y, [{ text: `${d.name} - ${profession}`, bold: false }]);
+        } else {
+          hidePersonTooltip();
+          showPersonPanel(d);
+          highlightLink(d);
+        }
+      };
+      const leavePhoto = () => {
+        hidePersonTooltip();
+        hidePersonPanel();
+        clearLinkHighlight();
+      };
       groups
         .on('mouseenter', function (event, d) {
-          if (sightT < panelReadyT) {
-            const idx = personIndexByName.get(d.name);
-            const profession = idx != null ? people[idx].profession : '';
-            showPersonTooltip(d.x, d.y, [{ text: `${d.name} - ${profession}`, bold: false }]);
-          } else {
-            hidePersonTooltip();
-            showPersonPanel(d);
-            highlightLink(d);
-          }
+          enterPhoto(d);
         })
         .on('mouseleave', () => {
-          hidePersonTooltip();
-          hidePersonPanel();
-          clearLinkHighlight();
+          // Touch browsers fire a mouseleave straight after the tap, which
+          // would close the panel at once; there it's closed by tapping
+          // elsewhere instead.
+          if (window.matchMedia('(hover: none)').matches) return;
+          leavePhoto();
+        })
+        // Touch: iOS Safari only fires mouse events (and so "hover") for
+        // elements with their own click handler, so a tap did nothing. A tap
+        // now shows the photo's panel directly; tapping anywhere else clears
+        // it (see the svg click handler below).
+        .on('click', function (event, d) {
+          if (!window.matchMedia('(hover: none)').matches) return;
+          event.stopPropagation();
+          enterPhoto(d);
         });
-
       return groups;
     }
 
@@ -1715,7 +1754,7 @@
             .select(this)
             .select('.sightSubIconLabel')
             .attr('x', 0)
-            .attr('y', iconCircleClearance)
+            .attr('y', iconCircleClearance + 16) // one line below the circle's edge
             .text(d.label);
           wrap(labelSel, labelMaxWidth[d.key] || 400, 15);
         });
@@ -2381,14 +2420,23 @@
       // Effect bar spans the real data range (3.7-4.8); set here since
       // template expressions can't reach this closure's consts.
       // Bryony: small gap between the rect's bottom and the legend text.
-      const microRowHeight = 16;
+      // Narrow phones (iPhone SE): the legend text steps down a size so its
+      // lines no longer collide with each other or with the Volume circles.
+      const narrowLegend = width < 420;
+      const legendFontSize = narrowLegend ? 10 : 12;
+      svg
+        .selectAll(
+          '.brainEffectValue, .brainEffectCaption, .brainVolumeValue, .brainVolumeCaption, .brainEffectTitle, .brainVolumeTitle, .brainLegendAnnotation'
+        )
+        .style('font-size', `${legendFontSize}px`);
+      const microRowHeight = narrowLegend ? 14 : 16;
       // Bryony: bar width 2/3 of original (was 160).
       const effectBarWidth = Math.round(160 * (2 / 3));
       const effectBarHeight = 16;
       const effectBarScreenX = toScreenX(legendPad);
       const effectBarScreenRight = toScreenX(legendPad + effectBarWidth);
       const effectCaptionLines = 2;
-      const effectCaptionFontSize = 12;
+      const effectCaptionFontSize = legendFontSize;
       const bottomPadding = 12; // real screen px, between a caption's last line and the rect's bottom edge
       const rectBottomScreen = toScreenY(640);
 
@@ -2494,7 +2542,7 @@
         .attr('y', volumeTitleY + microRowHeight - 4);
 
       // Bryony: Volume caption aligned with Effect's caption row.
-      const volumeCaptionFontSize = 12;
+      const volumeCaptionFontSize = legendFontSize;
       const volumeCaptionTop = effectCaptionTop;
       const volumeCaptionEl = svg
         .select('.brainVolumeCaption')
@@ -2504,7 +2552,13 @@
       // Bryony: wider wrap for the Volume caption — narrowed by the same
       // 8px the Volume block above shifted left, so wrapped lines don't
       // now run into it.
-      wrap(volumeCaptionEl, Math.min(220, 250 * iconScale) - volumeShiftPx, volumeCaptionFontSize);
+      // Also stop short of the Volume circles, which sit to its right.
+      const volumeCaptionRoom = volumeScreenCenterX - volumeLargeR * iconScale - 8 - toScreenX(350);
+      const volumeCaptionWidth = Math.max(
+        60,
+        Math.min(Math.min(220, 250 * iconScale) - volumeShiftPx, volumeCaptionRoom)
+      );
+      wrap(volumeCaptionEl, volumeCaptionWidth, volumeCaptionFontSize);
     }
 
     // Step 10, just getting the beat on the page for now: a title
@@ -3464,6 +3518,7 @@
         sightSubIconGroups = buildSightSubIcons();
         linkGroups = buildLinks();
         linkPhotoGroups = buildLinkPhotos();
+        document.addEventListener('click', dismissLinkOnTap);
         ({ xTicks: pubXTickGroups, yTicks: pubYTickGroups } = buildPublications());
         buildBrain();
         participantIconGroups = buildParticipantIcons();
@@ -3505,8 +3560,10 @@
     // Debounced so a live resize doesn't restart on every pixel.
     let resizeTimer;
     let firstObservation = true;
+    let lastRect = null;
     const observer = new ResizeObserver(([entry]) => {
       const rect = entry.contentRect;
+      lastRect = rect;
       if (firstObservation) {
         firstObservation = false;
         resize(rect);
@@ -3516,6 +3573,25 @@
       resizeTimer = setTimeout(() => resize(rect), 120);
     });
     observer.observe(container);
+
+    // Everything above measures text, so lay out again once Fredoka and
+    // Literata have actually loaded: on a phone the first pass often runs on
+    // the fallback font, which left gaps/overlaps (the step 3 title, legends)
+    // that only the real fonts' widths would have avoided.
+    let disposed = false;
+    if (document.fonts?.load) {
+      Promise.all([
+        document.fonts.load('600 40px Fredoka', 'What is SYNAESTHESIA?'),
+        document.fonts.load('400 20px Literata', 'Sample text 0123'),
+        document.fonts.load('700 20px Literata', 'Sample text 0123'),
+        document.fonts.load('italic 400 20px Literata', 'Sample text 0123')
+      ])
+        .catch(() => {})
+        .then(() => document.fonts.ready)
+        .then(() => {
+          if (!disposed && lastRect) resize(lastRect);
+        });
+    }
 
     sceneApi = {
       setRevealProgress(t) {
@@ -3543,7 +3619,9 @@
     };
 
     return () => {
+      disposed = true;
       clearTimeout(resizeTimer);
+      document.removeEventListener('click', dismissLinkOnTap);
       observer.disconnect();
       if (simulation) simulation.stop();
       sceneApi = null;
@@ -3812,6 +3890,7 @@
   :global(.chart-svg .personGroup),
   :global(.chart-svg .linkPhotoItem) {
     pointer-events: auto;
+    cursor: pointer; /* also makes iOS treat the photos as tappable */
   }
   :global(.chart-svg .personLabel) {
     font-family: var(--font-body);
@@ -3959,7 +4038,10 @@
     font-size: var(--text-caption, 15px);
     fill: var(--purple, #6a488c);
     text-anchor: middle;
-    dominant-baseline: hanging;
+    /* Alphabetic, not hanging: iOS Safari doesn't honour hanging, which let
+       these labels ride up over their circles. The y offset in layoutSight()
+       supplies the ascent instead, so every browser agrees. */
+    dominant-baseline: alphabetic;
   }
   :global(.chart-svg .sightLabel) {
     /* Matches .headerText (Fredoka 600), per "stick with step 1" rule. */
