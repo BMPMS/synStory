@@ -317,8 +317,6 @@
     </main>
   </div>
 
-  <p class="progress-label">Step {activeIndex + 1} — {Math.round(stepProgress * 100)}%</p>
-
   <div class="step"></div>
   <div class="step"></div>
   <div class="step"></div>

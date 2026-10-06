@@ -126,6 +126,12 @@
   .creditsIntro p {
     margin: 0;
   }
+  /* Phones: same size as the step captions (15px) rather than body size. */
+  @media (max-width: 600px) {
+    .creditsIntro {
+      font-size: var(--text-caption, 15px);
+    }
+  }
   .bmLink {
     color: inherit;
     text-decoration: none;

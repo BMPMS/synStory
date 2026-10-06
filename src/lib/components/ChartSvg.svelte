@@ -629,6 +629,12 @@
     let personPanelGeom = null; // { top, maxWidth, availH, cx } from layoutPersonPanel()
     let personPanelScale = null; // lazily chosen per layout (needs the real fonts loaded)
     const PANEL_SCALES = [1, 0.93, 0.86, 0.8, 0.74];
+    // Breathing room: name -> relationships, relationships -> quote.
+    const PANEL_NAME_GAP = 12;
+    const PANEL_QUOTE_GAP = 14;
+    // The panel text sits on an alphabetic baseline (iOS Safari ignores
+    // dominant-baseline: hanging), this far down from the top of its line.
+    const PANEL_ASCENT = 0.82;
     let linkPhotoSizeLast = 0; // set by layoutLinks(), read by layoutPersonPanel()
 
     function measurePanelText(str, { family, size, weight = 400, style = 'normal' }) {
@@ -701,7 +707,7 @@
       });
 
       const nameH = nameSize * 1.25;
-      const height = nameH + 4 + relLines.length * lineH + 8 + quoteLines.length * lineH;
+      const height = nameH + PANEL_NAME_GAP + relLines.length * lineH + PANEL_QUOTE_GAP + quoteLines.length * lineH;
       return { name, nameSize, bodySize, lineH, nameH, relLines, quoteLines, height };
     }
 
@@ -741,13 +747,13 @@
       const c = panelContent(d.name, d.edgeKey, personPanelScale, maxWidth);
       const g = svg.select('.personPanel');
 
-      g.select('.personPanelName').attr('x', cx).attr('y', top).attr('font-size', c.nameSize).text(c.name);
+      g.select('.personPanelName').attr('x', cx).attr('y', top + c.nameSize * PANEL_ASCENT).attr('font-size', c.nameSize).text(c.name);
 
-      let y = top + c.nameH + 4;
+      let y = top + c.nameH + PANEL_NAME_GAP;
       const relsG = g.select('.personPanelRels');
       relsG.selectAll('*').remove();
       c.relLines.forEach((line) => {
-        const t = relsG.append('text').attr('class', 'personPanelRel').attr('x', cx).attr('y', y).attr('font-size', c.bodySize);
+        const t = relsG.append('text').attr('class', 'personPanelRel').attr('x', cx).attr('y', y + c.bodySize * PANEL_ASCENT).attr('font-size', c.bodySize);
         line.forEach((seg, i) => {
           if (i > 0) t.append('tspan').attr('class', 'personPanelSep').text('\u00A0\u2009·\u00A0');
           // Each end of the hovered photo's own relationship is bold and
@@ -766,11 +772,11 @@
         y += c.lineH;
       });
 
-      y += 8;
+      y += PANEL_QUOTE_GAP;
       const quoteG = g.select('.personPanelQuote');
       quoteG.selectAll('*').remove();
       c.quoteLines.forEach((line) => {
-        const qt = quoteG.append('text').attr('class', 'personPanelQuoteLine').attr('x', cx).attr('y', y).attr('font-size', c.bodySize);
+        const qt = quoteG.append('text').attr('class', 'personPanelQuoteLine').attr('x', cx).attr('y', y + c.bodySize * PANEL_ASCENT).attr('font-size', c.bodySize);
         line.forEach((piece) => {
           qt.append('tspan').style('fill', piece.sense ? panelSenseColor(piece.sense) : null).text(piece.text);
         });
@@ -907,6 +913,25 @@
       svg.select('.aesthesiaText').text(answer.aesthesia);
     }
 
+    // getComputedTextLength() that always includes CSS letter-spacing. Chrome
+    // counts it, but iOS Safari (WebKit) leaves it out, so SYN / AESTHESIA /
+    // "?" came out a few px short on iPhones and ran into each other (and the
+    // pair sat off-centre). Detected once at runtime, so it's right in both.
+    let letterSpacingCounted;
+    function textLength(node) {
+      const len = node.getComputedTextLength();
+      const ls = parseFloat(getComputedStyle(node).letterSpacing);
+      if (!ls || Number.isNaN(ls)) return len;
+      if (letterSpacingCounted === undefined) {
+        const probe = svg.append('text').attr('font-size', 20).style('opacity', 0).style('letter-spacing', '0px').text('MMMMMMMM');
+        const plain = probe.node().getComputedTextLength();
+        probe.style('letter-spacing', '10px');
+        letterSpacingCounted = probe.node().getComputedTextLength() - plain > 40;
+        probe.remove();
+      }
+      return letterSpacingCounted ? len : len + ls * node.textContent.length;
+    }
+
     // Re-runs on resize; SYN/AESTHESIA are 2 elements read as one centred word.
     function layoutAnswer() {
       if (!answer) return;
@@ -922,8 +947,8 @@
         .attr('font-size', wordFontSize)
         .attr('y', wordY);
 
-      const synWidth = synText.node().getComputedTextLength();
-      const aesthesiaWidth = aesthesiaText.node().getComputedTextLength();
+      const synWidth = textLength(synText.node());
+      const aesthesiaWidth = textLength(aesthesiaText.node());
       const startX = width / 2 - (synWidth + aesthesiaWidth) / 2;
 
       synText.attr('x', startX);
@@ -956,7 +981,7 @@
       // used to leave SYN/AESTHESIA/"?" too tight or too loose on phones.
       const measure = (cls, str) => {
         const t = svg.append('text').attr('class', cls).attr('font-size', titleFontSize).style('opacity', 0).text(str);
-        const w = t.node().getComputedTextLength();
+        const w = textLength(t.node());
         t.remove();
         return w;
       };
@@ -967,7 +992,10 @@
       const spaceWidth = measure('whatIsText', 'a a') - measure('whatIsText', 'aa');
       const whatIsWidth = measure('whatIsText', 'What is') + spaceWidth;
 
-      const combinedWidth = whatIsWidth + synWidthAtTitle + aesthesiaWidthAtTitle;
+      // The "?" is part of the line, so it counts towards centring too
+      // (without it the whole title sat ~half a "?" to the left).
+      const questionWidth = measure('titleQuestion', '?');
+      const combinedWidth = whatIsWidth + synWidthAtTitle + aesthesiaWidthAtTitle + questionWidth;
       whatIsX = width / 2 - combinedWidth / 2;
       synTitleX = whatIsX + whatIsWidth;
       aesthesiaTitleX = synTitleX + synWidthAtTitle;
@@ -4471,13 +4499,13 @@
     font-weight: 600;
     fill: var(--text);
     text-anchor: middle;
-    dominant-baseline: hanging;
+    dominant-baseline: alphabetic;
   }
   :global(.chart-svg .personPanelRel) {
     font-family: var(--font-body);
     fill: var(--greyDark);
     text-anchor: middle;
-    dominant-baseline: hanging;
+    dominant-baseline: alphabetic;
   }
   :global(.chart-svg .personPanelRelEmph) {
     fill: var(--text);
@@ -4490,7 +4518,7 @@
     font-style: italic;
     fill: var(--text);
     text-anchor: middle;
-    dominant-baseline: hanging;
+    dominant-baseline: alphabetic;
   }
   :global(.chart-svg .personTooltip) {
     /* Hidden until raised; pointer-events none so it can't trigger a mouseleave. */
