@@ -13,7 +13,8 @@
 // colour for a given letter every time; someone without it tends to
 // pick fairly different colours across the 3 rounds. The distance
 // between a person's own 3 picks for each grapheme — averaged over all
-// 36 — is the "consistency score" this file computes.
+// 36 — is the "consistency score" this file computes, scored the way the
+// real Synesthesia Battery does (see scoreConsistency below).
 
 export const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 export const DIGITS = '0123456789'.split('');
@@ -99,21 +100,37 @@ function mean(nums) {
   return nums.reduce((sum, n) => sum + n, 0) / nums.length;
 }
 
+// Distance between two hex colours in plain RGB, each channel scaled 0-1
+// (so black to white is sqrt(3) ~ 1.73) — the colour space the original
+// Synesthesia Battery (Eagleman et al., 2007) measures in.
+function rgbDistance(hexA, hexB) {
+  const channels = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const [r1, g1, b1] = channels(hexA);
+  const [r2, g2, b2] = channels(hexB);
+  return Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2);
+}
+
 // responsesByGrapheme: { [grapheme]: [hex, hex, hex] } — 3 picks per
 // grapheme, in the order they were made.
+//
+// Scored like the real Synesthesia Battery: for each grapheme, the RGB
+// distances between every pair of its picks are added up (3 picks = 3
+// pairs), then that is averaged over all the graphemes. 0 means the same
+// colour every time; three random colours score about 2. The battery
+// counts under 1.0 as a synaesthete, and Rothen et al. (2013) later
+// proposed a looser cut-off of 1.43 — the bands below use both.
+// (Earlier versions of this test measured each pick's CIELAB distance
+// from the average pick, which isn't comparable to published figures.)
 export function scoreConsistency(responsesByGrapheme) {
   const perGrapheme = GRAPHEMES.map((grapheme) => {
     const colors = responsesByGrapheme[grapheme] || [];
-    const labs = colors.map(hexToLab);
-    const centroid = {
-      L: mean(labs.map((c) => c.L)),
-      a: mean(labs.map((c) => c.a)),
-      b: mean(labs.map((c) => c.b))
-    };
-    const meanDistance = mean(labs.map((c) => labDistance(c, centroid)));
-    return { grapheme, colors, meanDistance };
+    let distance = 0;
+    for (let a = 0; a < colors.length; a++) {
+      for (let b = a + 1; b < colors.length; b++) distance += rgbDistance(colors[a], colors[b]);
+    }
+    return { grapheme, colors, distance };
   });
-  const overallScore = mean(perGrapheme.map((p) => p.meanDistance));
+  const overallScore = mean(perGrapheme.map((p) => p.distance));
   const variety = checkColourVariety(responsesByGrapheme);
   return { perGrapheme, overallScore, variety, lowVariety: variety.tooSimilar };
 }
@@ -170,15 +187,15 @@ export function describeLowVariety() {
   };
 }
 
-// Deliberately descriptive, not diagnostic — these bands are a rough,
-// approximate read on the score for an engaging result screen, not a
-// clinical cutoff. Real batteries validate their own thresholds against
-// a studied population; this one hasn't been, and says so on screen.
+// Deliberately descriptive, not diagnostic. The cut-offs are the published
+// ones for the score above: under 1.0 is the Synesthesia Battery's own
+// synaesthete threshold, under 1.43 the revised one from Rothen et al.
+// (2013). This page isn't a validated clinical test, and says so on screen.
 // detailBefore/detailBold/detailAfter let the results screen bold a phrase
 // with a real <strong>; currently none of the bands use it.
 
 export function describeConsistency(overallScore) {
-  if (overallScore < 8) {
+  if (overallScore < 1.0) {
     return {
       label: 'Highly consistent',
       detailBefore: 'Your colours barely changed — likely you’re a grapheme → colour synaesthete.',
@@ -186,7 +203,7 @@ export function describeConsistency(overallScore) {
       detailAfter: ''
     };
   }
-  if (overallScore < 20) {
+  if (overallScore < 1.43) {
     return {
       label: 'Fairly consistent',
       detailBefore: 'Steadier than chance and more consistent than most people.',

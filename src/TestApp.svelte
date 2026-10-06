@@ -717,7 +717,7 @@
           {#if saveState === 'saved' && aggregate}
             <p class="footnote">
               Saved — you're one of {aggregate.count} people who've taken this so far
-              (average score {aggregate.avgScore.toFixed(1)}).
+              (average score {aggregate.avgScore.toFixed(2)}).
             </p>
           {:else if saveState === 'saved'}
             <p class="footnote">Saved — thanks for taking part.</p>

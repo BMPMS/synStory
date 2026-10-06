@@ -22,7 +22,7 @@ export const creditsSections = [
 ];
 
 export const creditsAgentLabels = {
-  HUMAN: 'Me',
+  HUMAN: 'BM Data',
   CLAUDE: 'Claude',
   'CHAT GPT': 'Chat GPT',
   OBSERVABLE: 'Observable'

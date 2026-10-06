@@ -7,17 +7,21 @@
   // no scroll/progress wiring, it just renders once.
   import * as d3 from 'd3';
   import { colors } from '../theme.js';
+  import { bmDataIcon } from '../data/bmDataIcon.js';
   import { creditsContributions, creditsSections, creditsAgentLabels } from '../data/creditsContributions.js';
 
   let svgEl;
 
-  // Simple hand-drawn glyphs (no icon library) — a person silhouette for
-  // the Human section, a friendly rounded-rect face for the AI section.
+  // The BM Data mark (same shape as the favicon) for the human column; a
+  // simple hand-drawn friendly rounded-rect face for the AI section.
   function drawPersonIcon(g) {
-    g.append('circle').attr('cy', -9).attr('r', 7).attr('fill', colors.greyDark);
+    const scale = 30 / bmDataIcon.width;
     g.append('path')
-      .attr('d', 'M -11 10 C -11 -2, 11 -2, 11 10 Z')
-      .attr('fill', colors.greyDark);
+      .attr('d', bmDataIcon.path)
+      .attr('transform', `translate(${(-bmDataIcon.width * scale) / 2},${(-bmDataIcon.height * scale) / 2 - 2}) scale(${scale})`)
+      .attr('fill', bmDataIcon.color)
+      .attr('stroke', bmDataIcon.color)
+      .attr('stroke-width', 3);
   }
   function drawRobotIcon(g) {
     g.append('rect').attr('x', -11).attr('y', -11).attr('width', 22).attr('height', 18).attr('rx', 5).attr('fill', colors.greyDark);
@@ -36,7 +40,7 @@
 
     const cw = 78;
     const pitch = 90;
-    const pad = 6;
+    const pad = 10; // clearance so the 17px "Observable" label sits inside the tinted panel
     const sectionGap = 20;
     const rowH = 42;
     const LABEL_SIZE = 17; // one step up from typeScale.caption — matches the Time spent chart's day/axis labels
@@ -81,10 +85,25 @@
       .attr('height', bottom - top)
       .attr('rx', 10)
       .attr('fill', colors.backgroundTint);
+    const BM_URL = 'https://www.bmdata.co.uk';
+    // The human column (icon + its "BM Data" label) links to the BM Data site.
+    const makeLink = (parent) =>
+      parent
+        .append('a')
+        .attr('href', BM_URL)
+        .attr('target', '_blank')
+        .attr('rel', 'noopener')
+        .attr('aria-label', 'BM Data Visualisation (opens in a new tab)')
+        .style('cursor', 'pointer');
     sec.each(function (d) {
-      const g = d3.select(this).append('g').attr('transform', `translate(${d.x + d.w / 2},${margin.top - 48})`);
-      if (d.name === 'Human') drawPersonIcon(g);
-      else drawRobotIcon(g);
+      const pos = `translate(${d.x + d.w / 2},${margin.top - 48})`;
+      if (d.name === 'Human') {
+        const g = makeLink(d3.select(this)).append('g').attr('transform', pos);
+        drawPersonIcon(g);
+      } else {
+        const g = d3.select(this).append('g').attr('transform', pos);
+        drawRobotIcon(g);
+      }
     });
 
     // Column labels
@@ -100,6 +119,13 @@
       .attr('font-size', LABEL_SIZE)
       .attr('fill', colors.greyDark)
       .text((d) => creditsAgentLabels[d]);
+    // Move the human column's label inside a link too.
+    svg.selectAll('text').filter((d) => d === 'HUMAN').each(function () {
+      const link = makeLink(d3.select(this.parentNode));
+      this.parentNode.insertBefore(link.node(), this);
+      link.node().appendChild(this);
+      d3.select(this).style('cursor', 'pointer');
+    });
 
     // Row labels — Bryony: match the day labels in the Time Spent chart
     // (and the credits caption text) exactly: body font, caption size,

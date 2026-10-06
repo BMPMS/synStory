@@ -8,6 +8,7 @@
   import { famousQuotes } from '../data/famousQuotes.js';
   import Contributions from './Contributions.svelte';
   import DevTimeStream from './DevTimeStream.svelte';
+  import { bmDataIcon } from '../data/bmDataIcon.js';
 
   const creditedPeople = people.filter((p) => photoCredits[p.name]);
 </script>
@@ -15,7 +16,12 @@
 <footer class="credits">
   <section class="creditsIntro">
     <p>
-      This project was an <em>AI Collaboration Experiment</em> working with 3 rules
+      This project was created by
+      <a class="bmLink" href="https://www.bmdata.co.uk" target="_blank" rel="noopener">
+        <svg class="bmIcon" viewBox="0 0 {bmDataIcon.width} {bmDataIcon.height}" aria-hidden="true">
+          <path d={bmDataIcon.path} fill={bmDataIcon.color} stroke={bmDataIcon.color} stroke-width="3" />
+        </svg>
+        BM Data Visualisation</a>. It is an <em>AI Collaboration Experiment</em> working with 3 rules
     </p>
     <div class="creditsRules">
       <p><strong>FOLLOW</strong> my established data visualisation project flow</p>
@@ -119,6 +125,21 @@
   }
   .creditsIntro p {
     margin: 0;
+  }
+  .bmLink {
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .bmLink:hover {
+    text-decoration: underline;
+  }
+  .bmIcon {
+    display: inline-block;
+    height: 1.1em;
+    width: auto;
+    vertical-align: -0.2em;
+    margin: 0 0.1em;
   }
   .creditsRules {
     /* Bryony: "line space above FOLLOW" / "three line spaces below DO" —
