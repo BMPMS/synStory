@@ -12,11 +12,12 @@
     SPEED_OPTIONS,
     REPEATS_PER_GRAPHEME
   } from './lib/data/graphemeTest.js';
+  import { previewResponses, PREVIEW_KINDS } from './lib/data/previewResponses.js';
   import { renderShareCard } from './lib/shareCard.js';
   const SHARE_URL = 'https://bmpms.github.io/synStory/test';
   import { supabase, supabaseConfigured } from './lib/supabase.js';
 
-  let screen = $state('intro'); // 'intro' | 'instructions' | 'demo' | 'confirmStart' | 'trial' | 'speedIntro' | 'speed' | 'results'
+  let screen = $state('intro'); // 'intro' | 'instructions' | 'demo' | 'confirmStart' | 'trial' | 'checkpoint' | 'quit' | 'speedIntro' | 'speed' | 'results'
   let name = $state('');
   // No email/account — honour system instead, so there's nothing
   // personally identifying to store (and no GDPR hassle). Repeating the
@@ -229,6 +230,12 @@
     return null;
   });
 
+  // Two "how are you doing?" check-ins, offering a way out for anyone who
+  // feels no connection at all: early on, and at the halfway point.
+  const EARLY_CHECK_TRIAL = 5;
+  let checkpointKind = $derived(trialNumber === EARLY_CHECK_TRIAL ? 'early' : 'half');
+  let trialsCompleted = $state(0); // set when someone chooses to quit
+
   // No "~N min left" estimate: it only counted the colour rounds, so it said
   // "less than a minute left" with the whole speed test still to come.
   let progressLabel = $derived(milestoneLabel ?? `${trialNumber} / ${totalTrials()}`);
@@ -260,10 +267,27 @@
       // the average everyone else is compared to.
       if (!results.lowVariety) saveResults();
       screen = 'speedIntro';
+    } else if (trialNumber === EARLY_CHECK_TRIAL || trialNumber === Math.round(totalTrials() * 0.5)) {
+      screen = 'checkpoint';
     } else {
       trialIndex += 1;
       resetPicker();
     }
+  }
+
+  function continueTrials() {
+    trialIndex += 1;
+    resetPicker();
+    screen = 'trial';
+  }
+
+  // A voluntary quit: no score, no speed test — just a record that someone
+  // stopped, and how far they'd got (fully anonymous, like a finished attempt).
+  function quitTest() {
+    trialsCompleted = trialNumber;
+    results = null;
+    screen = 'quit';
+    saveQuit();
   }
 
   // --- Speed congruency test ---
@@ -309,7 +333,7 @@
   // Persists the finished attempt — fully anonymous, just a score and the
   // per-grapheme colour picks, nothing identifying anyone.
   async function saveResults() {
-    if (!supabaseConfigured) return;
+    if (!supabaseConfigured || previewMode) return;
     saveState = 'saving';
     const { error } = await supabase
       .from('attempts')
@@ -318,10 +342,19 @@
     if (!error) fetchAggregate();
   }
 
+  async function saveQuit() {
+    if (!supabaseConfigured || previewMode) return;
+    saveState = 'saving';
+    const { error } = await supabase
+      .from('attempts')
+      .insert({ overall_score: null, per_grapheme: [], quit: true, trials_completed: trialsCompleted });
+    saveState = error ? 'error' : 'saved';
+  }
+
   // Anonymous aggregate across everyone's attempts (the attempts table has
   // no email/name on it at all), just for a "you're one of N" footnote.
   async function fetchAggregate() {
-    const { data, error } = await supabase.from('attempts').select('overall_score');
+    const { data, error } = await supabase.from('attempts').select('overall_score').not('overall_score', 'is', null);
     if (error || !data || !data.length) return;
     const avgScore = data.reduce((sum, row) => sum + Number(row.overall_score), 0) / data.length;
     aggregate = { count: data.length, avgScore };
@@ -443,6 +476,30 @@
     const h = (landscape ? 375 : 667) + bezel;
     return Math.min(1, (windowW - margin * 2) / w, (windowH - margin * 2) / h);
   });
+
+  // Preview mode, for checking the screens without taking the test: add
+  // ?preview=high | fair | variable | similar (a result screen),
+  // ?preview=quit, or ?preview=checkpoint | halfway (the check-ins) to
+  // test.html. Made-up answers, and nothing is ever saved.
+  const previewParam = new URLSearchParams(window.location.search).get('preview');
+  const previewMode = previewParam !== null;
+  if (previewMode) {
+    name = 'Preview';
+    if (PREVIEW_KINDS.includes(previewParam)) {
+      responsesByGrapheme = previewResponses(previewParam);
+      results = scoreConsistency(responsesByGrapheme);
+      speedResults = { total: 36, correctCount: 31, accuracy: 31 / 36, medianMs: 1400 };
+      screen = 'results';
+    } else if (previewParam === 'quit') {
+      trialsCompleted = 5;
+      saveState = 'saved';
+      screen = 'quit';
+    } else if (previewParam === 'checkpoint' || previewParam === 'halfway') {
+      trialSequence = buildTrialSequence();
+      trialIndex = previewParam === 'checkpoint' ? EARLY_CHECK_TRIAL - 1 : Math.round(totalTrials() * 0.5) - 1;
+      screen = 'checkpoint';
+    }
+  }
 </script>
 
 <svelte:window
@@ -646,6 +703,47 @@
         </button>
         <p class="keyHint">or press Return</p>
       </div>
+    {:else if screen === 'checkpoint'}
+      <div class="screenContent centredScreen">
+        <h2 class="subtitle">How are you doing?</h2>
+        {#if checkpointKind === 'early'}
+          <p class="body">
+            Do you have some sense of connection between <strong>letters&nbsp;+&nbsp;numbers&nbsp;→&nbsp;colour</strong>?
+          </p>
+          <p class="body">
+            If there is nothing at all, you can quit now and save yourself going through everything.
+          </p>
+        {:else}
+          <p class="body">
+            Are you beginning to feel you could have some fixed connections?
+          </p>
+          <p class="body">
+            Or would you like to quit at this stage, because you're almost certain there is none?
+          </p>
+        {/if}
+        <button class="primaryButton" onclick={continueTrials}>Continue</button>
+        <button class="secondaryButton" type="button" onclick={quitTest}>Quit now</button>
+      </div>
+    {:else if screen === 'quit'}
+      <div class="screenContent centredScreen">
+        <h2 class="subtitle">Thanks for having a go, {name}!</h2>
+        <p class="body">
+          Most people don't have fixed connections between <strong>letters&nbsp;+&nbsp;numbers&nbsp;→&nbsp;colour</strong>, so
+          stopping here is a perfectly good result.
+        </p>
+        {#if previewMode}
+          <p class="footnote">Preview only — nothing was saved.</p>
+        {:else if supabaseConfigured}
+          {#if saveState === 'saved'}
+            <p class="footnote">Your choice to stop has been recorded, anonymously. Thanks for taking part.</p>
+          {:else if saveState === 'error'}
+            <p class="footnote">Your choice to stop couldn't be saved (connection issue).</p>
+          {:else}
+            <p class="footnote">Saving…</p>
+          {/if}
+        {/if}
+        <a class="storyLink" href={import.meta.env.BASE_URL}>Read the story behind this test →</a>
+      </div>
     {:else if screen === 'speedIntro'}
       <div class="screenContent centredScreen">
         <h2 class="subtitle">Now, a speed test</h2>
@@ -687,6 +785,12 @@
         <p class="body resultsDetail">
           {band.detailBefore}{#if band.detailBold}<strong>{band.detailBold}</strong>{/if}{band.detailAfter}
         </p>
+        {#if !results.lowVariety && results.overallScore < 1.0}
+          <p class="body resultsDetail">
+            We'd love it if you'd <a class="inlineLink" href="mailto:bryony@bmdata.co.uk">get in touch</a>
+            to share more. Did you know you had synaesthesia? Or is it a complete surprise?
+          </p>
+        {/if}
 
         <div class="swatchGrid">
           {#each results.perGrapheme as row (row.grapheme)}
@@ -711,7 +815,9 @@
           <a class="inlineLink" href="https://synesthete.ircn.jp/" target="_blank" rel="noopener">real test</a>
           — not a diagnostic tool.
         </p>
-        {#if results.lowVariety}
+        {#if previewMode}
+          <p class="footnote">Preview only — nothing was saved.</p>
+        {:else if results.lowVariety}
           <!-- not saved, nothing to say -->
         {:else if supabaseConfigured}
           {#if saveState === 'saved' && aggregate}

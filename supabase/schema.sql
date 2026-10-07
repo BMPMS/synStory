@@ -9,8 +9,10 @@
 create table if not exists attempts (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
-  overall_score numeric not null,
-  per_grapheme jsonb not null
+  overall_score numeric, -- null when someone chose to quit part-way
+  per_grapheme jsonb not null,
+  quit boolean not null default false, -- true: stopped at a "how are you doing?" check-in
+  trials_completed integer -- for a quit, how many rounds they'd done
 );
 
 alter table attempts enable row level security;
@@ -24,3 +26,9 @@ create policy "anon can insert attempts" on attempts
 create policy "anon can read attempts" on attempts
   for select to anon
   using (true);
+
+-- Already created the table before the quit option existed? Run this once
+-- instead of the create above:
+--   alter table attempts alter column overall_score drop not null;
+--   alter table attempts add column if not exists quit boolean not null default false;
+--   alter table attempts add column if not exists trials_completed integer;

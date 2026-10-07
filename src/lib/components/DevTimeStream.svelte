@@ -4,9 +4,12 @@
   // here following the same plain D3 + Svelte pattern as Contributions
   // and ChartSvg: theme.js colours/fonts instead of hard-coded hexes,
   // data pulled from devTimeStream.js (progress/timeline.json durations).
-  // Static — no scroll/progress wiring, it just renders once.
+  // Static — no scroll/progress wiring, it just renders once. Drawn with
+  // joins only (see d3Layer.js): elements are created once and updated in
+  // place; the SVG is never cleared and nothing is ever removed.
   import * as d3 from 'd3';
   import { colors, fonts } from '../theme.js';
+  import { layer, one } from '../d3Layer.js';
   import { stages, THUMBS } from '../data/devTimeStream.js';
 
   let svgEl;
@@ -35,7 +38,6 @@
     const CONTENT_SIZE = 19; // matches theme typeScale.body — the stat block's own line
 
     const svg = d3.select(svgEl);
-    svg.selectAll('*').remove();
     svg
       .attr('viewBox', `0 0 ${width} ${height}`)
       .attr('width', width)
@@ -47,6 +49,7 @@
     const maxDuration = d3.max(stages, (d) => d.duration);
     const yScale = d3.scaleLinear().domain([0, Y_SCALE_MINUTES]).range([0, plotHeight]);
     const curveStages = stages.map((d, i) => ({ ...d, i })).filter((d) => !SKIP_IN_CURVE.has(d.i));
+    const days = stages.map((d, i) => ({ ...d, i }));
 
     const area = d3
       .area()
@@ -56,48 +59,35 @@
       .curve(d3.curveMonotoneX);
 
     // Vertical guide lines + top day labels + bottom thumbnails.
-    stages.forEach((d, i) => {
-      const cx = xScale(i);
+    layer(svg, 'line', 'guide', days)
+      .attr('x1', (d) => xScale(d.i)).attr('x2', (d) => xScale(d.i))
+      .attr('y1', plotTop).attr('y2', plotBottom)
+      .attr('stroke', colors.grey)
+      .attr('stroke-width', 1);
 
-      svg
-        .append('line')
-        .attr('x1', cx).attr('x2', cx)
-        .attr('y1', plotTop).attr('y2', plotBottom)
-        .attr('stroke', colors.grey)
-        .attr('stroke-width', 1);
+    layer(svg, 'text', 'dayLabel', days)
+      .attr('x', (d) => xScale(d.i)).attr('y', plotTop - 12)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', fonts.body)
+      .attr('font-size', TITLE_SIZE)
+      .attr('fill', colors.greyDark)
+      .text((d) => d.name);
 
-      svg
-        .append('text')
-        .attr('x', cx).attr('y', plotTop - 12)
-        .attr('text-anchor', 'middle')
-        .attr('font-family', fonts.body)
-        .attr('font-size', TITLE_SIZE)
-        .attr('fill', colors.greyDark)
-        .text(d.name);
-
-      if (d.thumb) {
-        const ty = plotBottom + 14;
-        svg
-          .append('image')
-          .attr('href', THUMBS[d.thumb])
-          .attr('x', cx - THUMB_SIZE / 2).attr('y', ty)
-          .attr('width', THUMB_SIZE).attr('height', THUMB_SIZE)
-          .attr('preserveAspectRatio', 'xMidYMid slice')
-          .attr('clip-path', 'inset(0 round 4px)');
-      }
-    });
+    layer(svg, 'image', 'dayThumb', days.filter((d) => d.thumb))
+      .attr('href', (d) => THUMBS[d.thumb])
+      .attr('x', (d) => xScale(d.i) - THUMB_SIZE / 2).attr('y', plotBottom + 14)
+      .attr('width', THUMB_SIZE).attr('height', THUMB_SIZE)
+      .attr('preserveAspectRatio', 'xMidYMid slice')
+      .attr('clip-path', 'inset(0 round 4px)');
 
     // The stream itself (drawn after guide lines so it covers their middle).
-    svg
-      .append('path')
-      .datum(curveStages)
+    layer(svg, 'path', 'stream', [curveStages])
       .attr('d', area)
       .attr('fill', colors.purple)
       .attr('fill-opacity', 0.88);
 
     // Title riding inside the widest part of the stream.
-    svg
-      .append('text')
+    one(svg, 'text', 'streamTitle')
       .attr('x', (xStart + xEnd) / 2).attr('y', centerY)
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
@@ -113,22 +103,18 @@
     // Bryony: the arrows reach the top and bottom of the widest section
     // (a little more than the "8h" label says).
     const axisTop = centerY - yScale(maxDuration) / 2, axisBottom = centerY + yScale(maxDuration) / 2;
-    svg
-      .append('line')
+    one(svg, 'line', 'axisLine')
       .attr('x1', axisX).attr('x2', axisX)
       .attr('y1', axisTop + 7).attr('y2', axisBottom - 7)
       .attr('stroke', colors.greyDark)
       .attr('stroke-width', 1.5);
-    svg
-      .append('path')
+    one(svg, 'path', 'axisArrowTop')
       .attr('d', `M ${axisX - 5},${axisTop + 8} L ${axisX + 5},${axisTop + 8} L ${axisX},${axisTop} Z`)
       .attr('fill', colors.greyDark);
-    svg
-      .append('path')
+    one(svg, 'path', 'axisArrowBottom')
       .attr('d', `M ${axisX - 5},${axisBottom - 8} L ${axisX + 5},${axisBottom - 8} L ${axisX},${axisBottom} Z`)
       .attr('fill', colors.greyDark);
-    svg
-      .append('text')
+    one(svg, 'text', 'axisLabel')
       .attr('x', axisX - 10).attr('y', centerY)
       .attr('text-anchor', 'end')
       .attr('dominant-baseline', 'middle')
@@ -137,26 +123,30 @@
       .attr('fill', colors.grey)
       .text(`${Math.floor(maxDuration / 60)}h`);
 
-    if (SHOW_STATS) {
-      // Total + token/cost stat block, bottom-right — sits below the
-      // thumbnail row with a line-height's worth of breathing room.
-      const totalMinutes = stages.reduce((sum, d) => sum + d.duration, 0);
-      const thumbBottom = plotBottom + 14 + THUMB_SIZE;
-      const statY = thumbBottom + 48 + 14;
-      const stat = svg.append('g').attr('transform', `translate(${width - margin.right},${statY})`);
-      const line1 = stat.append('text').attr('text-anchor', 'end').attr('font-family', fonts.body);
-      line1.append('tspan').attr('fill', colors.grey).attr('font-size', CONTENT_SIZE).text('Total ');
-      line1.append('tspan').attr('fill', colors.text).attr('font-weight', 700).attr('font-size', CONTENT_SIZE).text(`${Math.round(totalMinutes / 60)}h `);
-      line1.append('tspan').attr('fill', colors.grey).attr('font-size', CONTENT_SIZE).text('over ');
-      line1.append('tspan').attr('fill', colors.text).attr('font-weight', 700).attr('font-size', CONTENT_SIZE).text(`${stages.length} days`);
-
-      const line2 = stat.append('text').attr('y', 24).attr('text-anchor', 'end').attr('font-family', fonts.body);
-      line2.append('tspan').attr('fill', colors.text).attr('font-weight', 700).attr('font-size', CONTENT_SIZE).text('26.5 million tokens');
-
-      const line3 = stat.append('text').attr('y', 48).attr('text-anchor', 'end').attr('font-family', fonts.body);
-      line3.append('tspan').attr('fill', colors.grey).attr('font-size', CONTENT_SIZE).text('nominal token cost ');
-      line3.append('tspan').attr('fill', colors.text).attr('font-weight', 700).attr('font-size', CONTENT_SIZE).text('US$400');
-    }
+    // Total + token/cost stat block, bottom-right — sits below the
+    // thumbnail row with a line-height's worth of breathing room. Only
+    // shown when SHOW_STATS is on (otherwise its group is hidden, not removed).
+    const totalMinutes = stages.reduce((sum, d) => sum + d.duration, 0);
+    const thumbBottom = plotBottom + 14 + THUMB_SIZE;
+    const statY = thumbBottom + 48 + 14;
+    const grey = (text) => ({ text, fill: colors.grey });
+    const strong = (text) => ({ text, fill: colors.text, bold: true });
+    const statLines = [
+      { y: 0, pieces: [grey('Total '), strong(`${Math.round(totalMinutes / 60)}h `), grey('over '), strong(`${stages.length} days`)] },
+      { y: 24, pieces: [strong('26.5 million tokens')] },
+      { y: 48, pieces: [grey('nominal token cost '), strong('US$400')] }
+    ];
+    const stat = layer(svg, 'g', 'stat', SHOW_STATS ? [0] : [])
+      .attr('transform', `translate(${width - margin.right},${statY})`);
+    const statText = layer(stat, 'text', 'statLine', statLines)
+      .attr('y', (d) => d.y)
+      .attr('text-anchor', 'end')
+      .attr('font-family', fonts.body);
+    layer(statText, 'tspan', 'statPiece', (d) => d.pieces)
+      .attr('fill', (p) => p.fill)
+      .attr('font-weight', (p) => (p.bold ? 700 : null))
+      .attr('font-size', CONTENT_SIZE)
+      .text((p) => p.text);
   });
 </script>
 

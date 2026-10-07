@@ -1,6 +1,7 @@
 <script>
   import * as d3 from 'd3';
   import forceBounce from 'd3-force-bounce';
+  import { layer } from '../d3Layer.js';
   import forceSurface from 'd3-force-surface';
   import {
     phase,
@@ -85,12 +86,13 @@
     ariaLabel = 'Portraits of well-known people, drifting and bouncing gently within the frame.'
   } = $props();
 
-  // Wraps text onto tspans, measuring the real rendered element. Optional
+  // Wraps a string onto tspans, measuring the real rendered element. Optional
   // boldWords (a Set) renders matching words bold within the wrapped lines.
-  function wrap(textSelection, width, fontSize, boldWords) {
+  // Joins only (see d3Layer.js): the line (and bold-word) tspans are created
+  // once and re-used on every layout; spare ones are hidden, never removed.
+  function wrap(textSelection, str, width, fontSize, boldWords) {
     textSelection.each(function () {
       const text = d3.select(this);
-      const words = text.text().split(/\s+/).reverse();
       const x = text.attr('x');
       const y = text.attr('y');
       const setLine = (el, lineWords) => {
@@ -98,36 +100,37 @@
           el.text(lineWords.join(' '));
           return;
         }
-        el.text(null);
-        lineWords.forEach((w, i) => {
-          el.append('tspan')
-            .style('font-weight', boldWords.has(w) ? 700 : null)
-            .text(i === 0 ? w : ` ${w}`);
-        });
+        layer(el, 'tspan', 'wrapWord', lineWords)
+          .style('font-weight', (w) => (boldWords.has(w) ? 700 : null))
+          .text((w, i) => (i === 0 ? w : ` ${w}`));
       };
-      let word;
-      let line = [];
-      let tspan = text.text(null).append('tspan').attr('x', x).attr('y', y).attr('dy', 0);
+      const words = str.split(/\s+/).filter((w) => w !== '');
 
-      while ((word = words.pop())) {
+      // First pass: break the words into lines, measuring on the first line's tspan.
+      const probe = layer(text, 'tspan', 'wrapLine', [[]]).attr('x', x).attr('y', y).attr('dy', 0);
+      const probeEl = probe.node();
+      const lines = [];
+      let line = [];
+      words.forEach((word) => {
         line.push(word);
-        setLine(tspan, line);
-        if (tspan.node().getComputedTextLength() > width) {
+        setLine(probe, line);
+        if (probeEl.getComputedTextLength() > width && line.length > 1) {
           line.pop();
-          setLine(tspan, line);
+          lines.push(line);
           line = [word];
-          if (word.trim() !== '') {
-            if (tspan.text().trim() === '') {
-              setLine(tspan, line);
-            } else {
-              // Fix: only the first tspan gets an explicit y (which resets
-              // the SVG baseline); every later line advances via dy alone.
-              tspan = text.append('tspan').attr('x', x).attr('dy', fontSize);
-              setLine(tspan, line);
-            }
-          }
         }
-      }
+      });
+      lines.push(line);
+
+      // Second pass: one tspan per line. Only the first gets an explicit y
+      // (which resets the SVG baseline); later lines advance via dy alone.
+      layer(text, 'tspan', 'wrapLine', lines)
+        .attr('x', x)
+        .attr('y', (l, i) => (i === 0 ? y : null))
+        .attr('dy', (l, i) => (i === 0 ? 0 : fontSize))
+        .each(function (l) {
+          setLine(d3.select(this), l);
+        });
     });
   }
 
@@ -749,39 +752,39 @@
 
       g.select('.personPanelName').attr('x', cx).attr('y', top + c.nameSize * PANEL_ASCENT).attr('font-size', c.nameSize).text(c.name);
 
-      let y = top + c.nameH + PANEL_NAME_GAP;
+      // Joins only (see d3Layer.js): the line and span elements are created
+      // once and re-used for each person; any spare ones are hidden, not removed.
+      const firstLineTop = top + c.nameH + PANEL_NAME_GAP;
       const relsG = g.select('.personPanelRels');
-      relsG.selectAll('*').remove();
-      c.relLines.forEach((line) => {
-        const t = relsG.append('text').attr('class', 'personPanelRel').attr('x', cx).attr('y', y + c.bodySize * PANEL_ASCENT).attr('font-size', c.bodySize);
-        line.forEach((seg, i) => {
-          if (i > 0) t.append('tspan').attr('class', 'personPanelSep').text('\u00A0\u2009·\u00A0');
+      const relPieces = (line) =>
+        line.flatMap((seg, i) => [
+          ...(i > 0 ? [{ text: '\u00A0\u2009·\u00A0', fill: 'var(--grey)' }] : []),
           // Each end of the hovered photo's own relationship is bold and
           // tinted with its sense's colour; the person's other
           // relationships are plain grey (Bryony).
-          const word = (label, key) =>
-            t
-              .append('tspan')
-              .style('fill', seg.emph ? panelSenseColor(key) : 'var(--grey)')
-              .style('font-weight', seg.emph ? 700 : null)
-              .text(label);
-          word(seg.fromLabel, seg.fromKey);
-          t.append('tspan').style('fill', seg.emph ? 'var(--text)' : 'var(--grey)').text('\u00A0→\u00A0');
-          word(seg.toLabel, seg.toKey);
-        });
-        y += c.lineH;
-      });
+          { text: seg.fromLabel, fill: seg.emph ? panelSenseColor(seg.fromKey) : 'var(--grey)', bold: seg.emph },
+          { text: '\u00A0→\u00A0', fill: seg.emph ? 'var(--text)' : 'var(--grey)' },
+          { text: seg.toLabel, fill: seg.emph ? panelSenseColor(seg.toKey) : 'var(--grey)', bold: seg.emph }
+        ]);
+      const relTexts = layer(relsG, 'text', 'personPanelRel', c.relLines)
+        .attr('x', cx)
+        .attr('y', (line, i) => firstLineTop + i * c.lineH + c.bodySize * PANEL_ASCENT)
+        .attr('font-size', c.bodySize);
+      layer(relTexts, 'tspan', 'personPanelPiece', relPieces)
+        .style('fill', (p) => p.fill)
+        .style('font-weight', (p) => (p.bold ? 700 : null))
+        .text((p) => p.text);
 
-      y += PANEL_QUOTE_GAP;
+      const quoteTop = firstLineTop + c.relLines.length * c.lineH + PANEL_QUOTE_GAP;
       const quoteG = g.select('.personPanelQuote');
-      quoteG.selectAll('*').remove();
-      c.quoteLines.forEach((line) => {
-        const qt = quoteG.append('text').attr('class', 'personPanelQuoteLine').attr('x', cx).attr('y', y + c.bodySize * PANEL_ASCENT).attr('font-size', c.bodySize);
-        line.forEach((piece) => {
-          qt.append('tspan').style('fill', piece.sense ? panelSenseColor(piece.sense) : null).text(piece.text);
-        });
-        y += c.lineH;
-      });
+      const quoteTexts = layer(quoteG, 'text', 'personPanelQuoteLine', c.quoteLines)
+        .attr('x', cx)
+        .attr('y', (line, i) => quoteTop + i * c.lineH + c.bodySize * PANEL_ASCENT)
+        .attr('font-size', c.bodySize);
+      layer(quoteTexts, 'tspan', 'personPanelPiece', (line) => line)
+        .style('fill', (p) => (p.sense ? panelSenseColor(p.sense) : null))
+        .style('font-weight', null)
+        .text((p) => p.text);
 
       g.style('opacity', 1);
     }
@@ -879,8 +882,7 @@
       personGroups.select('.personLabel').attr('y', TILE / 2 + labelOffset);
     }
 
-    // Sizes/wraps the header; resets to plain text first since wrap()
-    // rebuilds it as tspans.
+    // Sizes/wraps the header.
     function layoutHeader() {
       if (!headerText) {
         topMargin = edgeMargin;
@@ -893,12 +895,11 @@
 
       const headerEl = svg
         .select('.headerText')
-        .text(headerText)
         .attr('font-size', fontSize)
         .attr('x', width / 2)
         .attr('y', topPadding + fontSize / 2);
 
-      wrap(headerEl, maxTextWidth, fontSize);
+      wrap(headerEl, headerText, maxTextWidth, fontSize);
 
       // getBBox since wrap() may have made this multi-line.
       const headerBox = headerEl.node().getBBox();
@@ -923,11 +924,12 @@
       const ls = parseFloat(getComputedStyle(node).letterSpacing);
       if (!ls || Number.isNaN(ls)) return len;
       if (letterSpacingCounted === undefined) {
-        const probe = svg.append('text').attr('font-size', 20).style('opacity', 0).style('letter-spacing', '0px').text('MMMMMMMM');
+        // One persistent, invisible probe element (never removed).
+        const probe = svg.selectAll('text.letterSpacingProbe').data([0]).join('text').attr('class', 'letterSpacingProbe').attr('font-size', 20).style('opacity', 0).style('pointer-events', 'none').style('letter-spacing', '0px').text('MMMMMMMM');
         const plain = probe.node().getComputedTextLength();
         probe.style('letter-spacing', '10px');
         letterSpacingCounted = probe.node().getComputedTextLength() - plain > 40;
-        probe.remove();
+        probe.style('letter-spacing', null);
       }
       return letterSpacingCounted ? len : len + ls * node.textContent.length;
     }
@@ -980,10 +982,17 @@
       // and trailing spaces are measured differently by Safari/Chrome — both
       // used to leave SYN/AESTHESIA/"?" too tight or too loose on phones.
       const measure = (cls, str) => {
-        const t = svg.append('text').attr('class', cls).attr('font-size', titleFontSize).style('opacity', 0).text(str);
-        const w = textLength(t.node());
-        t.remove();
-        return w;
+        // One persistent, invisible element re-used for every measurement.
+        const t = svg
+          .selectAll('text.titleMeasure')
+          .data([0])
+          .join('text')
+          .attr('class', `titleMeasure ${cls}`)
+          .attr('font-size', titleFontSize)
+          .style('opacity', 0)
+          .style('pointer-events', 'none')
+          .text(str);
+        return textLength(t.node());
       };
       const synWidthAtTitle = measure('synText', answer.syn);
       const aesthesiaWidthAtTitle = measure('aesthesiaText', answer.aesthesia);
@@ -1048,9 +1057,6 @@
 
     // Step9: 36 participant icons, join-once; labels set once (static text).
     function buildParticipantIcons() {
-      svg.select('.participantLabelLeft').text('18 grapheme-colour synaesthetes');
-      svg.select('.participantLabelRight').text('18 controls');
-
       const groups = svg
         .select('.participantIconsGroup')
         .selectAll('.participantIconItem')
@@ -1081,7 +1087,6 @@
           return g;
         });
 
-      groups.select('.sightSubIconLabel').text((d) => d.label);
 
       return groups;
     }
@@ -1273,6 +1278,10 @@
           });
         }
       });
+      // The spotlight respondent's cells paint on top of every other cell
+      // they overlap once expanded, so they go last in the DOM from the
+      // start (rather than being re-inserted with raise() on each layout).
+      cellData.sort((a, b) => (a.i === spotlightUserIndex) - (b.i === spotlightUserIndex));
       heatmapCellGroups = svg
         .select('.heatmapCellsGroup')
         .selectAll('.heatmapCell')
@@ -1659,11 +1668,10 @@
       sightLabelWrapWidth = labelWrapWidth;
       const labelEl = svg
         .select('.sightLabel')
-        .text(sightHeaderTextFor[sightHeaderStage])
         .attr('font-size', labelFontSize)
         .attr('x', width / 2)
         .attr('y', topPadding + labelFontSize / 2);
-      wrap(labelEl, labelWrapWidth, labelFontSize);
+      wrap(labelEl, sightHeaderTextFor[sightHeaderStage], labelWrapWidth, labelFontSize);
       const labelBox = labelEl.node().getBBox();
 
       // Composition must fit the band between the caption and the tile cluster.
@@ -1785,9 +1793,8 @@
             .select(this)
             .select('.sightSubIconLabel')
             .attr('x', 0)
-            .attr('y', iconCircleClearance + 16) // one line below the circle's edge
-            .text(d.label);
-          wrap(labelSel, labelMaxWidth[d.key] || 400, 15);
+            .attr('y', iconCircleClearance + 16); // one line below the circle's edge
+          wrap(labelSel, d.label, labelMaxWidth[d.key] || 400, 15);
         });
       }
       // Same bg-circle radius on all 4 corner senses, per Bryony.
@@ -2102,11 +2109,10 @@
       const titleWrapWidth = Math.min(width - 48, titleFontSize * 30);
       const titleEl = svg
         .select('.publicationsTitle')
-        .text(publicationsChartTitleText)
         .attr('font-size', titleFontSize)
         .attr('x', width / 2)
         .attr('y', topPadding + titleFontSize / 2);
-      wrap(titleEl, titleWrapWidth, titleFontSize);
+      wrap(titleEl, publicationsChartTitleText, titleWrapWidth, titleFontSize);
       const titleBox = titleEl.node().getBBox();
 
       // Bryony: more padding around the chart; y-axis moved right, freeing the left.
@@ -2244,22 +2250,20 @@
       const titleWrapWidth = Math.min(width - 48, titleFontSize * 30);
       const titleEl = svg
         .select('.brainTitle')
-        .text(brainQuestionText)
         .attr('font-size', titleFontSize)
         .attr('x', width / 2)
         .attr('y', topPadding + titleFontSize / 2);
-      wrap(titleEl, titleWrapWidth, titleFontSize);
+      wrap(titleEl, brainQuestionText, titleWrapWidth, titleFontSize);
       const titleBox = titleEl.node().getBBox();
 
       const subtitleFontSize = Math.max(13, Math.min(17, width * 0.018));
       const subtitleWrapWidth = Math.min(width - 48, subtitleFontSize * 44);
       const subtitleEl = svg
         .select('.brainSubtitle')
-        .text('Rouw & Scholte (2007) · 18 grapheme-colour synaesthetes vs 18 controls')
         .attr('font-size', subtitleFontSize)
         .attr('x', width / 2)
         .attr('y', titleBox.y + titleBox.height + spacing.lg + subtitleFontSize / 2);
-      wrap(subtitleEl, subtitleWrapWidth, subtitleFontSize);
+      wrap(subtitleEl, 'Rouw & Scholte (2007) · 18 grapheme-colour synaesthetes vs 18 controls', subtitleWrapWidth, subtitleFontSize);
       const subtitleBox = subtitleEl.node().getBBox();
 
       const headerHeight = subtitleBox.y + subtitleBox.height;
@@ -2306,13 +2310,13 @@
         .attr('font-size', headingFontSize)
         .attr('x', toScreenX(160))
         .attr('y', toScreenY(50));
-      wrap(headingLeftEl, headingWrapWidth, headingFontSize, participantLeftBoldWords);
+      wrap(headingLeftEl, '18 grapheme-colour synaesthetes', headingWrapWidth, headingFontSize, participantLeftBoldWords);
       const headingRightEl = svg
         .select('.participantLabelRight')
         .attr('font-size', headingFontSize)
         .attr('x', toScreenX(480))
         .attr('y', toScreenY(50));
-      wrap(headingRightEl, headingWrapWidth, headingFontSize, participantRightBoldWords);
+      wrap(headingRightEl, '18 controls', headingWrapWidth, headingFontSize, participantRightBoldWords);
 
       // 18 icons per side, 3x6 grid, scales with iconScale.
       const localHalfWidth = 320;
@@ -2477,11 +2481,10 @@
       const effectCaptionTop = rectBottomScreen - bottomPadding - effectCaptionLines * effectCaptionFontSize;
       const effectCaptionEl = svg
         .select('.brainEffectCaption')
-        .text('Max statistical difference between synaesthetes + controls')
         .attr('x', effectBarScreenX)
         .attr('y', effectCaptionTop);
       // Bryony: wider wrap for the caption text.
-      wrap(effectCaptionEl, Math.min(220, 280 * iconScale), effectCaptionFontSize);
+      wrap(effectCaptionEl, 'Max statistical difference between synaesthetes + controls', Math.min(220, 280 * iconScale), effectCaptionFontSize);
 
       const effectBarScreenBottom = effectCaptionTop - 8;
       const effectBarScreenTop = effectBarScreenBottom - effectBarHeight * iconScale;
@@ -2577,7 +2580,6 @@
       const volumeCaptionTop = effectCaptionTop;
       const volumeCaptionEl = svg
         .select('.brainVolumeCaption')
-        .text('Size of the significant brain region (mm³)')
         .attr('x', toScreenX(350))
         .attr('y', volumeCaptionTop);
       // Bryony: wider wrap for the Volume caption — narrowed by the same
@@ -2589,7 +2591,7 @@
         60,
         Math.min(Math.min(220, 250 * iconScale) - volumeShiftPx, volumeCaptionRoom)
       );
-      wrap(volumeCaptionEl, volumeCaptionWidth, volumeCaptionFontSize);
+      wrap(volumeCaptionEl, 'Size of the significant brain region (mm³)', volumeCaptionWidth, volumeCaptionFontSize);
     }
 
     // Step 10, just getting the beat on the page for now: a title
@@ -2602,22 +2604,20 @@
       const titleWrapWidth = Math.min(width - 48, titleFontSize * 30);
       const titleEl = svg
         .select('.connectionsTitle')
-        .text('When do synaesthete connections form?')
         .attr('font-size', titleFontSize)
         .attr('x', width / 2)
         .attr('y', topPadding + titleFontSize / 2);
-      wrap(titleEl, titleWrapWidth, titleFontSize);
+      wrap(titleEl, 'When do synaesthete connections form?', titleWrapWidth, titleFontSize);
       const titleBox = titleEl.node().getBBox();
 
       const subtitleFontSize = Math.max(13, Math.min(17, width * 0.018));
       const subtitleWrapWidth = Math.min(width - 48, subtitleFontSize * 44);
       const subtitleEl = svg
         .select('.connectionsSubtitle')
-        .text('Witthoft, Winawer & Eagleman (2015) · 6,588 synaesthetes')
         .attr('font-size', subtitleFontSize)
         .attr('x', width / 2)
         .attr('y', titleBox.y + titleBox.height + spacing.lg + subtitleFontSize / 2);
-      wrap(subtitleEl, subtitleWrapWidth, subtitleFontSize);
+      wrap(subtitleEl, 'Witthoft, Winawer & Eagleman (2015) · 6,588 synaesthetes', subtitleWrapWidth, subtitleFontSize);
       const subtitleBox = subtitleEl.node().getBBox();
 
       // Step10: drawn magnet tray (rounded rect + dividers), 26 letters.
@@ -2757,11 +2757,10 @@
       const wrapWidth = Math.min(width - 48, fontSize * 20);
       const titleEl = svg
         .select('.whyICareTitle')
-        .text('Why do I care?')
         .attr('font-size', fontSize)
         .attr('x', width / 2)
         .attr('y', topPadding + fontSize / 2);
-      wrap(titleEl, wrapWidth, fontSize);
+      wrap(titleEl, 'Why do I care?', wrapWidth, fontSize);
     }
 
     // Step11: blends letter from tray -> ring position.
@@ -2845,7 +2844,8 @@
         (byLetter[d.letter] || (byLetter[d.letter] = [])).push(d);
       });
       Object.keys(byLetter).forEach((letter) => {
-        const cells = byLetter[letter];
+        // Respondent order, whatever order the cells sit in the DOM.
+        const cells = byLetter[letter].sort((a, b) => a.i - b.i);
         const matches = cells.filter((d) => d.isMatch);
         const nonMatches = cells.filter((d) => !d.isMatch);
         matches.forEach((d, r) => {
@@ -2870,9 +2870,6 @@
           d.isSpotlight = d.i === spotlightUserIndex;
         });
       });
-      // Paints on top of every other cell it overlaps once expanded,
-      // regardless of data-join order.
-      heatmapCellGroups.filter((d) => d.isSpotlight).raise();
     }
 
     // Step11 ring + bar geometry, computed once per resize per datum.
@@ -3237,11 +3234,10 @@
         sightHeaderStage = displayStage;
         const labelEl = svg
           .select('.sightLabel')
-          .text(sightHeaderStage === 'famous' ? sightFamousText : sightSplitText)
           .attr('font-size', sightLabelFontSize)
           .attr('x', width / 2)
           .attr('y', topPadding + sightLabelFontSize / 2);
-        wrap(labelEl, sightLabelWrapWidth, sightLabelFontSize);
+        wrap(labelEl, sightHeaderStage === 'famous' ? sightFamousText : sightSplitText, sightLabelWrapWidth, sightLabelFontSize);
       }
     }
 
